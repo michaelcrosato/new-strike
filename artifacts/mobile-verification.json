@@ -65,7 +65,7 @@
         "draw": 78,
         "drawn": 36865,
         "fps": 131,
-        "streamMs": 0.12,
+        "streamMs": 0.06,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -85,7 +85,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 55.4
+          "ms": 55.7
         },
         "mapMs": 0,
         "cameraClearance": 156.6
@@ -129,10 +129,10 @@
         "vh": 844
       },
       "coveredPercent": 14,
-      "travelled": 45.9,
+      "travelled": 45.8,
       "fire": {
-        "peakShots": 4,
-        "cablePaid": 10.25
+        "peakShots": 5,
+        "cablePaid": 9.9
       },
       "pinchZoom": {
         "zoomStart": 4,
@@ -173,7 +173,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 147,
+          "ms": 151,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -192,7 +192,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 143,
+          "ms": 148,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -211,7 +211,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 143,
+          "ms": 148,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -232,7 +232,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 143,
+          "ms": 148,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -251,7 +251,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 143,
+          "ms": 148,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -270,7 +270,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 106,
+          "ms": 111,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -314,8 +314,8 @@
         "triangles": 47224,
         "draw": 87,
         "drawn": 43997,
-        "fps": 132,
-        "streamMs": 0.02,
+        "fps": 133,
+        "streamMs": 0.04,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -335,7 +335,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 55.5
+          "ms": 54.7
         },
         "mapMs": 0,
         "cameraClearance": 156.6
@@ -379,10 +379,10 @@
         "vh": 390
       },
       "coveredPercent": 20,
-      "travelled": 46.5,
+      "travelled": 45.8,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 9.49
+        "cablePaid": 10.09
       },
       "pinchZoom": {
         "zoomStart": 4,
@@ -423,7 +423,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 145,
+          "ms": 144,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -442,7 +442,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 142,
+          "ms": 144,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -461,7 +461,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 142,
+          "ms": 144,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -482,7 +482,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 142,
+          "ms": 144,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -501,7 +501,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 142,
+          "ms": 144,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -520,7 +520,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 104,
+          "ms": 106,
           "size": 709,
           "redraws": 3,
           "settled": false

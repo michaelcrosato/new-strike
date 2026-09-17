@@ -15,7 +15,10 @@ import { chromium, devices } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const base = 'http://127.0.0.1:4189';
+// Defaults to the local server; point BASE at a deployment to check the thing that is
+// actually live, which is where the phone is going to open it.
+//   BASE=https://new-strike.vercel.app node tests/mobile-browser.mjs
+const base = (process.env.BASE ?? 'http://127.0.0.1:4189').replace(/\/$/, '');
 const url = seed => `${base}/?seed=${seed}`;
 const SEED = 20492;
 // The region is ten kilometres square: 2000 units at five metres each.
