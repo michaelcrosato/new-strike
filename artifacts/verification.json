@@ -1,0 +1,68 @@
+{
+  "checks": [
+    "Desktop loads the embedded 3D scene and briefing",
+    "Field manual opens and returns to briefing",
+    "Synthesized audio starts from a user gesture and mute toggles correctly",
+    "Real keyboard input moves the aircraft in the rendered game",
+    "Weapon selection and held fire consume ammunition",
+    "Pause, graphics, volume, tactical map and resume work",
+    "Complete mission succeeds using flight, combat, resupply, winch and extraction controls",
+    "Best score and graphics/audio preferences persist in local storage",
+    "Replay fully resets mission and enemies",
+    "Fuel failure, debrief and return to briefing work",
+    "Real mouse aiming and firing hit a rendered enemy target",
+    "Android landscape: two simultaneous real touches fly and fire",
+    "Touch weapon switching and countermeasures work",
+    "Holding the touch winch control lands, repairs, refuels and rearms",
+    "Android portrait layout fits all controls without document overflow",
+    "Touch tactical map opens, pauses and resumes",
+    "Compact 780×360 landscape briefing remains tappable",
+    "Distributed single HTML runs offline from file:// without test controls",
+    "No external asset requests, JavaScript errors or shader errors"
+  ],
+  "errors": [],
+  "network": [],
+  "desktop": {
+    "mission": {
+      "time": 80.85666666666268,
+      "score": 13029,
+      "minArmor": 42.19999999999999,
+      "kills": 14,
+      "route": [
+        "coast-aa",
+        "coast-sam",
+        "road-tank",
+        "coastal-radar",
+        "camp-west",
+        "camp-east",
+        "camp-tank",
+        "bridge-tank",
+        "citadel-sam",
+        "citadel-aa",
+        "generator-west",
+        "generator-east",
+        "storm-command"
+      ]
+    },
+    "performance": {
+      "fps": 144,
+      "quality": "cinematic",
+      "pixelRatio": 1,
+      "drawCalls": 1563,
+      "triangles": 149832,
+      "ready": true,
+      "touch": false
+    }
+  },
+  "mobile": {
+    "landscape": {
+      "fps": 74,
+      "quality": "mobile",
+      "pixelRatio": 1.3,
+      "drawCalls": 460,
+      "triangles": 39123,
+      "ready": true,
+      "touch": true
+    }
+  }
+}

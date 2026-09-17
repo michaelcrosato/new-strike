@@ -1,0 +1,10 @@
+node_modules/
+artifacts/*
+!artifacts/*.json
+!artifacts/capture-scenes.mjs
+.DS_Store
+.vercel/
+
+# The single-file build outputs are this project's deliverable, so they are
+# tracked even though ~/.gitignore_global excludes dist/.
+!dist/

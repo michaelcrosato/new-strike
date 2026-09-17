@@ -1,0 +1,10 @@
+{
+  "gpu": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 SUPER (0x00002783) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+  "fps": 141,
+  "quality": "cinematic",
+  "pixelRatio": 1,
+  "drawCalls": 1192,
+  "triangles": 118258,
+  "ready": true,
+  "touch": false
+}
