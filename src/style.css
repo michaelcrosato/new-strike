@@ -12,3 +12,4 @@ body:not(.touch) #context{top:52%}
 @media(max-height:500px) and (min-width:701px){.brief-bottom{display:none}}
 @media(max-height:390px) and (min-width:701px){.briefing-main{top:65px}h1{font-size:52px}body.touch #context{top:42%}.brief-meta{font-size:5px}.topbar .utility{gap:12px}}
 @supports(padding:env(safe-area-inset-top)){.topbar{padding-top:max(17px,env(safe-area-inset-top));padding-left:max(24px,env(safe-area-inset-left));padding-right:max(24px,env(safe-area-inset-right))}.brief-bottom{bottom:max(24px,env(safe-area-inset-bottom))}body.touch .weapons{bottom:max(16px,env(safe-area-inset-bottom))}}
+.radio p{font-family:"Barlow",Arial,sans-serif}h1 i{font:14px "Barlow",Arial,sans-serif}

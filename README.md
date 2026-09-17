@@ -55,7 +55,7 @@ Recon, Pilot and Ace adjust incoming damage, enemy fire rate and fuel use. Debri
 
 ## Rendering and performance
 
-Three.js r186 / WebGL 2 with physically based materials, dynamic soft shadows, HDR bloom, AgX tone mapping, animated water normals, rotor wash, smoke, sparks, debris, terrain-following flight and responsive camera banking/shake. The Cinematic preset adds GTAO, subtle focus-based depth of field, 4× multisampling and 4096px shadow maps. Static meshes are merged, projectiles and particles use instancing, and mobile rendering caps pixel density and uses smaller shadow maps.
+Three.js r186 / WebGL 2 with physically based materials, dynamic soft shadows, HDR bloom, AgX tone mapping, animated water normals, rotor wash, smoke, sparks, debris, terrain-following flight and responsive camera banking/shake. The Cinematic preset adds GTAO, subtle focus-based depth of field, 4× multisampling and 4096px shadow maps. Static scenery and each animated model are merged by shading class with colour carried per vertex, merged geometry is welded and indexed, projectiles and particles use instancing, and mobile rendering caps pixel density and uses smaller shadow maps. The whole scene is 164 meshes rather than 548, for the same 48,500 triangles.
 
 Auto selects a graphics preset and can reduce rendering cost if sustained frame rate is low. Graphics and audio controls are in the pause menu. Sound is synthesized locally with Web Audio after a user gesture. Reduced-motion preferences disable grain animation and camera shake.
 
@@ -75,6 +75,8 @@ npm run build    # rebuild both single-file deliverables
 - `src/audio.js` — synthesized rotor, weapons, explosions and feedback tones.
 - `src/shell.html`, `src/style.css` — interface and responsive layouts.
 - `tests/core.test.mjs`, `tests/browser.mjs` — automated validation.
+- `assets/` — brand mark, icons, social card and the subset interface fonts that the build embeds.
+- `scripts/make-brand.mjs`, `scripts/make-fonts.mjs` — regenerate those assets from the source faces. They need ImageMagick and uv with fontTools, and are deliberately not part of `npm run build`, which stays node-only.
 - `artifacts/verification.json` — latest browser results and measured session statistics.
 
 The browser test flies the entire mission with simulated control inputs, including enemy fire, ammunition use, resupply, rescues and extraction. It does not teleport the aircraft or edit health/ammo/stages in the full mission run. Separate focused input/failure checks use explicit fixtures. Test controls are available only with `?test`; normal play exposes read-only diagnostics at `window.blockhawk`.

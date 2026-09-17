@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BASE, DEPOT, CAMP, randomGenerator, distance } from './core.js';
 
 export const ISLANDS = [
@@ -38,6 +38,10 @@ export class World {
     this.materials = {}; this.geometries = {}; this.enemies = new Map(); this.rotating = [];
     this.particles = []; this.trails = []; this.smoking = []; this.rings = []; this.birds = []; this.obstacles = [];
     for (const [name, color] of Object.entries(palettes)) this.materials[name] = new THREE.MeshStandardMaterial({ color, roughness: name === 'glass' ? .18 : .83, metalness: name === 'glass' ? .6 : name === 'steel' ? .42 : .03, flatShading: true });
+    for (const name of ['palm', 'palmLight', 'palmTop']) {
+      const frond = this.materials[name].clone(); frond.side = THREE.DoubleSide; this.materials[name + 'Frond'] = frond;
+    }
+    this.mergedMaterials = new Map();
     this.materials.glow = new THREE.MeshStandardMaterial({ color: 0xffb84b, emissive: 0xff9600, emissiveIntensity: 2.3 });
     this.materials.cyan = new THREE.MeshStandardMaterial({ color: 0x81edd0, emissive: 0x32cbaa, emissiveIntensity: 1.1 });
     this.materials.enemyGlow = new THREE.MeshStandardMaterial({ color: 0xff8156, emissive: 0xff3105, emissiveIntensity: 1.9 });
@@ -45,7 +49,7 @@ export class World {
     this.makePad(DEPOT.x, DEPOT.z, 7.6, 'F', false);
     this.makeRescue(); this.mergeStatic();
     this.heli = this.makeHelicopter(); this.dynamic.add(this.heli);
-    this.makeEnemies(game); this.makeMarkers(); this.makeParticles(); this.makeBirds();
+    this.makeEnemies(game); this.mergeModels(); this.makeMarkers(); this.makeParticles(); this.makeBirds();
     this.reset(game);
   }
   mat(m) { return typeof m === 'string' ? this.materials[m] : m; }
@@ -220,7 +224,7 @@ export class World {
         Math.sin(a)*l*.58,top+.55,Math.cos(a)*l*.58,Math.sin(a)*l,top-1.8,Math.cos(a)*l,Math.sin(a-.23)*l*.6,top+.05,Math.cos(a-.23)*l*.6,
         Math.sin(a)*l*.58,top+.55,Math.cos(a)*l*.58,Math.sin(a+.23)*l*.6,top+.05,Math.cos(a+.23)*l*.6,Math.sin(a)*l,top-1.8,Math.cos(a)*l];
       geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3)); geo.computeVertexNormals();
-      const m=this.mesh(geo,i%3===0?'palmTop':i%2?'palmLight':'palm',lean,0,0,g); m.material.side=THREE.DoubleSide;
+      this.mesh(geo,i%3===0?'palmTopFrond':i%2?'palmLightFrond':'palmFrond',lean,0,0,g);
     }
   }
   scatterNature() {
@@ -236,13 +240,22 @@ export class World {
       }
     }
   }
+  drawPadLetter(canvas,letter) {
+    const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#d2d8b7';ctx.font='900 160px "Barlow Condensed",Impact,sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(letter,128,137);
+  }
   makePad(x,z,r,letter,carrier) {
     const y=carrier?2.52:2.88;
     this.box(x,y-.09,z,r*2,.17,r*2,'dark');
     const circle=this.mesh(new THREE.RingGeometry(r*.73,r*.78,48),'cream',x,y+.02,z); circle.rotation.x=-PI/2;circle.castShadow=false;
     const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
-    const ctx=canvas.getContext('2d');ctx.fillStyle='#d2d8b7';ctx.font='bold 144px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(letter,128,137);
+    this.drawPadLetter(canvas,letter);
     const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
+    // The interface font is embedded in the page, but it may not be parsed yet when the deck is
+    // built, so the letter is redrawn once it is ready instead of baking a system fallback.
+    const fontReady=document.fonts&&document.fonts.load&&document.fonts.load('900 160px "Barlow Condensed"');
+    if(fontReady&&fontReady.then)fontReady.then(()=>{this.drawPadLetter(canvas,letter);texture.needsUpdate=true;}).catch(()=>{});
     const mat=new THREE.MeshBasicMaterial({map:texture,transparent:true,depthWrite:false});
     const text=this.mesh(new THREE.PlaneGeometry(r*1.4,r*1.4),mat,x,y+.04,z);text.rotation.x=-PI/2;text.castShadow=false;
     for(const a of [0,PI/2,PI,PI*1.5]) this.box(x+Math.cos(a)*r*.95,y+.07,z+Math.sin(a)*r*.95,.8,.2,.8,'cyan');
@@ -274,6 +287,7 @@ export class World {
       this.box(-.2,.23,0,.2,.55,.25,'dark',p);this.box(.2,.23,0,.2,.55,.25,'dark',p);
       const arm=this.box(-.5,1.1,0,.2,.8,.23,'orange',p);arm.rotation.z=-.6;
       p.userData.home=p.position.clone();
+      this.mergeGroup(p);
       this.people.push(p);
     }
   }
@@ -323,6 +337,8 @@ export class World {
     this.cylinder(0,2.37,.1,.5,.5,.16,'dark',8,body);
     const blurMat=new THREE.MeshBasicMaterial({color:0x38534b,transparent:true,opacity:.07,side:THREE.DoubleSide,depthWrite:false});
     this.rotorBlur=this.mesh(new THREE.RingGeometry(2.3,7.9,64),blurMat,0,2.24,.1,body);this.rotorBlur.rotation.x=-PI/2;this.rotorBlur.castShadow=false;
+    this.rotor.userData.animated=true;this.tailRotor.userData.animated=true;
+    this.mergeGroup(this.rotor);this.mergeGroup(this.tailRotor);this.mergeGroup(body);
     g.scale.setScalar(.9);
     const lineGeo=new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,-8,0)]);
     this.winch=new THREE.Line(lineGeo,new THREE.LineBasicMaterial({color:0xe8ddb4}));g.add(this.winch);this.winch.visible=false;
@@ -371,6 +387,18 @@ export class World {
       }
     }
   }
+  // Each enemy is built from a dozen or more primitives; merging them per model turns every
+  // model into two or three draw calls while leaving turrets and dishes free to animate.
+  mergeModels() {
+    for (const group of this.enemies.values()) {
+      const { turret, dish } = group.userData;
+      if (turret) turret.userData.animated = true;
+      if (dish) dish.userData.animated = true;
+      this.mergeGroup(group);
+      if (turret) this.mergeGroup(turret);
+      if (dish) this.mergeGroup(dish);
+    }
+  }
   makeMarkers() {
     this.marker=new THREE.Group();this.dynamic.add(this.marker);
     const mat=new THREE.MeshBasicMaterial({color:0xffc16a,transparent:true,opacity:.8,depthWrite:false,side:THREE.DoubleSide});
@@ -379,25 +407,89 @@ export class World {
     this.wash=this.mesh(new THREE.RingGeometry(2,7,48),new THREE.MeshBasicMaterial({color:0xc0d1b7,transparent:true,opacity:.15,depthWrite:false,side:THREE.DoubleSide}),0,3,0,this.dynamic);this.wash.rotation.x=-PI/2;this.wash.castShadow=false;
     this.beacon=this.mesh(new THREE.CylinderGeometry(.3,.3,15,6),new THREE.MeshBasicMaterial({color:0xffd584,transparent:true,opacity:.3,depthWrite:false}),0,0,0,this.marker);this.beacon.position.y=7.5;this.beacon.castShadow=false;
   }
+  // Opaque matte geometry only differs by colour, so it can share one material once the
+  // colour moves into the vertices. Transparent, textured and emissive meshes stay as they are.
+  canBakeColor(material) {
+    return material.isMeshStandardMaterial && !material.map && !material.transparent
+      && material.emissive.getHex() === 0 && !material.wireframe;
+  }
+  shadingKey(material) {
+    return this.canBakeColor(material)
+      ? `bake_${material.roughness}_${material.metalness}_${material.side}`
+      : material.uuid;
+  }
+  mergedMaterial(material) {
+    const key = this.shadingKey(material);
+    if (!this.canBakeColor(material)) return material;
+    if (!this.mergedMaterials.has(key)) this.mergedMaterials.set(key, new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: material.roughness, metalness: material.metalness,
+      side: material.side, flatShading: true,
+    }));
+    return this.mergedMaterials.get(key);
+  }
+  bakeVertexColor(geometry, color) {
+    const count = geometry.getAttribute('position').count, array = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) { array[i*3] = color.r; array[i*3+1] = color.g; array[i*3+2] = color.b; }
+    geometry.setAttribute('color', new THREE.BufferAttribute(array, 3));
+  }
+  // Flattens a mesh into world-or-parent space, ready to merge.
+  bakedGeometry(mesh, matrix) {
+    let geo = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    if (geo.getAttribute('uv')) geo.deleteAttribute('uv');
+    geo.applyMatrix4(matrix);
+    if (this.canBakeColor(mesh.material)) this.bakeVertexColor(geo, mesh.material.color);
+    return geo;
+  }
+  buildMerged(bucket) {
+    let geo = bucket.geos.length === 1 ? bucket.geos[0] : mergeGeometries(bucket.geos);
+    const welded = mergeVertices(geo, 1e-4);
+    if (welded && welded !== geo) { geo.dispose(); geo = welded; }
+    const mesh = new THREE.Mesh(geo, this.mergedMaterial(bucket.material));
+    mesh.castShadow = bucket.shadow; mesh.receiveShadow = true;
+    for (const g of bucket.geos) if (g !== geo) g.dispose();
+    return mesh;
+  }
+  // Collapses one animated model (an enemy, the airframe, a rescuee) to a few draw calls.
+  // Subgroups flagged animated are left in place and merged on their own.
+  mergeGroup(root) {
+    root.updateMatrixWorld(true);
+    const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert(), local = new THREE.Matrix4();
+    const sources = [], buckets = new Map();
+    const collect = node => {
+      for (const child of node.children) {
+        if (child.isGroup) { if (!child.userData.animated) collect(child); continue; }
+        if (child.isMesh && !child.material.transparent) sources.push(child);
+      }
+    };
+    collect(root);
+    if (sources.length < 2) return;
+    for (const mesh of sources) {
+      const key = this.shadingKey(mesh.material) + '_' + mesh.castShadow;
+      if (!buckets.has(key)) buckets.set(key, { material: mesh.material, shadow: mesh.castShadow, geos: [] });
+      buckets.get(key).geos.push(this.bakedGeometry(mesh, local.multiplyMatrices(toRoot, mesh.matrixWorld)));
+    }
+    for (const mesh of sources) { mesh.removeFromParent(); mesh.geometry.dispose(); }
+    for (const bucket of buckets.values()) root.add(this.buildMerged(bucket));
+    for (const child of [...root.children]) if (child.isGroup && !child.children.length) child.removeFromParent();
+  }
   mergeStatic() {
     this.static.updateMatrixWorld(true);
     const buckets=new Map();const preserve=[];
     this.static.traverse(obj=>{
       if(!obj.isMesh) return;
       if(obj===this.water||obj.material.map||obj.material.transparent||this.rotating.includes(obj)) {preserve.push(obj);return;}
-      const position=new THREE.Vector3();obj.getWorldPosition(position);
-      const key=obj.material.uuid+'_'+Math.floor(position.x/55)+'_'+Math.floor(position.z/55)+'_'+obj.castShadow;
-      if(!buckets.has(key)) buckets.set(key,{mat:obj.material,shadow:obj.castShadow,geos:[]});
-      let geo=obj.geometry.clone();if(geo.index) {const n=geo.toNonIndexed();geo.dispose();geo=n;}
-      if(geo.getAttribute('uv')) geo.deleteAttribute('uv');
-      geo.applyMatrix4(obj.matrixWorld);buckets.get(key).geos.push(geo);
+      // Key on the geometry's own centre: slabs are built in absolute coordinates and sit at the
+      // origin, so keying on object position used to drop the whole terrain into one cell.
+      const position=new THREE.Vector3();
+      if(!obj.geometry.boundingBox)obj.geometry.computeBoundingBox();
+      obj.geometry.boundingBox.getCenter(position).applyMatrix4(obj.matrixWorld);
+      const key=this.shadingKey(obj.material)+'_'+Math.floor(position.x/75)+'_'+Math.floor(position.z/75)+'_'+obj.castShadow;
+      if(!buckets.has(key)) buckets.set(key,{material:obj.material,shadow:obj.castShadow,geos:[]});
+      buckets.get(key).geos.push(this.bakedGeometry(obj,obj.matrixWorld));
     });
     for(const obj of preserve) this.scene.attach(obj);
     const old=this.static;this.static=new THREE.Group();this.scene.add(this.static);
-    for(const {mat,shadow,geos} of buckets.values()) {
-      const geo=mergeGeometries(geos);const m=new THREE.Mesh(geo,mat);m.castShadow=shadow;m.receiveShadow=true;this.static.add(m);
-      for(const g of geos) g.dispose();
-    }
+    for (const bucket of buckets.values()) this.static.add(this.buildMerged(bucket));
     this.scene.remove(old);old.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
   }
   makeParticles() {

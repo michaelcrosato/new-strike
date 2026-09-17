@@ -254,11 +254,11 @@ function drawMap(canvas,large) {
   const [px,pz]=map(game.p.x,game.p.z);ctx.save();ctx.translate(px,pz);ctx.rotate(game.p.yaw);
   ctx.fillStyle='#f4edc9';ctx.beginPath();const n=large?12:7;ctx.moveTo(0,-n);ctx.lineTo(n*.65,n*.7);ctx.lineTo(0,n*.28);ctx.lineTo(-n*.65,n*.7);ctx.closePath();ctx.fill();ctx.restore();
   if(large) {
-    ctx.font='600 15px Arial';ctx.textBaseline='bottom';ctx.fillStyle='#d1dcc0';
+    ctx.font='600 15px "Barlow",sans-serif';ctx.textBaseline='bottom';ctx.fillStyle='#d1dcc0';
     for(const [x,z,text] of [[-99,134,'HOMEPLATE'],[-90,6,'RADAR'],[-7,-40,'ENGINEERS'],[83,-115,'STORM BATTERY'],[-23,-10,'FIELD SUPPLY'],[71,98,'PORT TERN']]) {
       const [lx,lz]=map(x,z);ctx.fillText(text,lx-text.length*4.4,lz);
     }
-    ctx.font='12px Arial';ctx.fillStyle='#a3b79a';for(let i=0;i<4;i++){ctx.fillText(String.fromCharCode(65+i),map(-120+i*80,0)[0],18);ctx.fillText(String(i+1),9,map(0,-120+i*80)[1]);}
+    ctx.font='12px "Barlow",sans-serif';ctx.fillStyle='#a3b79a';for(let i=0;i<4;i++){ctx.fillText(String.fromCharCode(65+i),map(-120+i*80,0)[0],18);ctx.fillText(String(i+1),9,map(0,-120+i*80)[1]);}
   }
 }
 

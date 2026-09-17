@@ -13,10 +13,10 @@ The source objective is the pasted brief: a finished browser-game vertical slice
 | Mobile controls | Two simultaneous real CDP touch contacts fly and fire; quick flare tap, weapon tiles and held resupply work. Layout inspected at 915×412, 412×915 and 780×360. |
 | RTX 4070 SUPER target | Browser renderer identifies NVIDIA GeForce RTX 4070 SUPER / ANGLE D3D11. Brief 1440×900 Cinematic scene samples report approximately 141–144 FPS. These are smoke measurements, not a sustained hardware benchmark. |
 | Samsung S26 target | Responsive Android touch layouts, capped render density, mobile graphics preset and adaptive quality are implemented and tested via device emulation. Physical S26 performance remains unmeasured. |
-| Single-file delivery | `dist/blockhawk.html` and identical `index.html`, approximately 836 KiB. Rendering library, models, textures, fonts, UI, synthesized audio and third-party notices are embedded. Offline `file://` launch and deployment pass, with zero external asset requests. |
+| Single-file delivery | `dist/blockhawk.html` and identical `index.html`, approximately 779 KiB. Rendering library, models, textures, subset interface fonts, UI, synthesized audio and third-party notices are embedded. Offline `file://` launch and deployment pass, with zero external asset requests. |
 
 The browser suite also checks full reset, fuel failure, audio start/mute, paused simulation invariants, best-score/settings storage, offline delivery and the absence of test controls in normal play. `artifacts/verification.json` contains the latest results. `artifacts/hardware.json` records the GPU identification; screenshots are in `artifacts/`.
 
 The full browser mission test uses accelerated simulation controls and normal combat rules. It does not teleport, modify health/ammo, skip stages or disable enemies during that run. Separate focused input and visual checks intentionally use fixtures. A human player can take time to read the map and manage supplies; the test pilot is a speed run, not a play-duration estimate.
 
-Final HTML SHA-256: `6BD07010223E6A71333B6A0D44362CE1FEC90450E13C976D171B53BE3CBB8F5D`.
+Final HTML SHA-256: `57D08EAB400D3DA1344C153136F8F69384603C0D9CAA2E6D79F94C9C5C02627A`.
