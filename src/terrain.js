@@ -41,6 +41,35 @@ const PROBES = [
 ];
 const PROBE_WEIGHT = PROBES.reduce((total, p) => total + p[3], 0);
 
+/**
+ * The colour of one patch of ground, written into `out` at `at`.
+ *
+ * Blends the palettes of every biome the classifier can reach from this point, then mixes
+ * towards rock by how steep the surface is. Exported because both the streamed chunks and
+ * the coarse region overview colour their ground with it: sharing the code is what stops
+ * the two surfaces drifting apart into visibly different palettes at the seam between them.
+ */
+export function groundColour(world, h, m, t, steep, alt, out, at = 0) {
+  const slot = alt > 0.15 ? 1 : 0;
+  let br = 0, bg = 0, bb = 0, cr = 0, cg = 0, cb = 0;
+  for (let p = 0; p < PROBES.length; p++) {
+    const probe = PROBES[p];
+    const id = world.classify(h + probe[0], m + probe[1], t + probe[2]);
+    const w = probe[3], base = id * 9, tint = base + slot * 3;
+    br += PALETTE[tint] * w; bg += PALETTE[tint + 1] * w; bb += PALETTE[tint + 2] * w;
+    cr += PALETTE[base + 6] * w; cg += PALETTE[base + 7] * w; cb += PALETTE[base + 8] * w;
+  }
+  br /= PROBE_WEIGHT; bg /= PROBE_WEIGHT; bb /= PROBE_WEIGHT;
+  cr /= PROBE_WEIGHT; cg /= PROBE_WEIGHT; cb /= PROBE_WEIGHT;
+  out[at] = br + (cr - br) * steep;
+  out[at + 1] = bg + (cg - bg) * steep;
+  out[at + 2] = bb + (cb - bb) * steep;
+}
+
+// A little large-scale variation, so a plain does not read as one flat sheet. Shared for
+// the same reason as the colour itself.
+export const groundAlt = (x, z) => (Math.sin(x * 0.031) + Math.cos(z * 0.027)) * 0.5;
+
 // Primitives disagree about indexing (octahedra come out non-indexed, boxes indexed) and
 // mergeGeometries refuses a mixture, so every piece is flattened before merging.
 const flatten = geo => { if (!geo.index) return geo; const out = geo.toNonIndexed(); geo.dispose(); return out; };
@@ -52,11 +81,14 @@ const linearB = hex => { tmpB.setHex(hex); return tmpB; };
 
 export function createMaterials() {
   const ground = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .92, metalness: .02, flatShading: true });
+  // The far field gets smooth shading. Its quads are forty metres across, and faceting that
+  // reads as construction-toy charm at four metres reads as a fault at forty.
+  const distant = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .94, metalness: .02, flatShading: false });
   const foliage = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .86, metalness: .02, flatShading: true });
   const built = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .78, metalness: .06, flatShading: true });
   const glass = new THREE.MeshStandardMaterial({ color: 0x173b4a, roughness: .2, metalness: .55, flatShading: true });
-  return { ground, foliage, built, glass,
-    dispose() { for (const m of [ground, foliage, built, glass]) m.dispose(); } };
+  return { ground, distant, foliage, built, glass,
+    dispose() { for (const m of [ground, distant, foliage, built, glass]) m.dispose(); } };
 }
 
 // ---------------------------------------------------------------- ground
@@ -105,28 +137,7 @@ function groundGeometry(world, cx, cz, lod, sites) {
       const spanX = (Math.min(ix + 1, side - 1) - Math.max(ix - 1, 0)) * step;
       const spanZ = (Math.min(iz + 1, side - 1) - Math.max(iz - 1, 0)) * step;
       const steep = Math.min(1, Math.hypot((east - west) / spanX, (south - north) / spanZ) * 2.1);
-
-      // Blend the palettes of every biome the classifier reaches from here. Deep inside a
-      // biome that is one colour; near a threshold it is the mixture.
-      const alt = (Math.sin(x * 0.031) + Math.cos(z * 0.027)) * 0.5;
-      const slot = alt > 0.15 ? 1 : 0;
-      let br = 0, bg = 0, bb = 0, cr = 0, cg = 0, cb = 0;
-      for (let p = 0; p < PROBES.length; p++) {
-        const probe = PROBES[p];
-        const id = world.classify(heights[i] + probe[0], wet[i] + probe[1], warm[i] + probe[2]);
-        const w = probe[3], base = id * 9;
-        br += PALETTE[base + slot * 3] * w;
-        bg += PALETTE[base + slot * 3 + 1] * w;
-        bb += PALETTE[base + slot * 3 + 2] * w;
-        cr += PALETTE[base + 6] * w;
-        cg += PALETTE[base + 7] * w;
-        cb += PALETTE[base + 8] * w;
-      }
-      br /= PROBE_WEIGHT; bg /= PROBE_WEIGHT; bb /= PROBE_WEIGHT;
-      cr /= PROBE_WEIGHT; cg /= PROBE_WEIGHT; cb /= PROBE_WEIGHT;
-      colours[i * 3] = br + (cr - br) * steep;
-      colours[i * 3 + 1] = bg + (cg - bg) * steep;
-      colours[i * 3 + 2] = bb + (cb - bb) * steep;
+      groundColour(world, heights[i], wet[i], warm[i], steep, groundAlt(x, z), colours, i * 3);
     }
   }
 

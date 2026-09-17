@@ -27,6 +27,5 @@ await writeFile('dist/blockhawk.html', html);
 // Served by convention next to the game: browsers request /favicon.ico and iOS looks for
 // /apple-touch-icon.png without any markup, and crawlers follow og:image.
 for (const [from, to] of [['assets/favicon.ico','dist/favicon.ico'],['assets/icon-180.png','dist/apple-touch-icon.png'],['assets/icon-512.png','dist/icon-512.png'],['assets/og.jpg','dist/og.jpg']]) await copyFile(from, to);
-await writeFile('dist/index.html', html);
-await writeFile('index.html', html);
-console.log(`Built dist/blockhawk.html, dist/index.html and index.html (${(Buffer.byteLength(html) / 1024).toFixed(0)} KB). All assets embedded; no network requests.`);
+// The root belongs to MERCENARY STRIKE now; the campaign is served from its own page.
+console.log(`Built dist/blockhawk.html (${(Buffer.byteLength(html) / 1024).toFixed(0)} KB). All assets embedded; no network requests.`);

@@ -14,6 +14,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { createWorld, WORLD, BIOMES, FACTIONS } from './worldgen.js';
 import { ChunkStreamer, desiredChunks } from './streaming.js';
 import { buildChunk, createMaterials } from './terrain.js';
+import { buildOverview, OVERVIEW_RESOLUTION } from './overview.js';
 import { createProfile, generateContracts, accept, resolve, endDay, standingBand, situation,
   purchase, hire, UPGRADES, HIREABLE, applyStanding } from './agency.js';
 import { createCombat, rearm, syncHostiles, stepCombat, availableWeapons, combatStandingDeltas,
@@ -123,6 +124,17 @@ function buildAirframe() {
     new THREE.MeshBasicMaterial({ color: 0x3d4b46, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.y = 1.95; body.add(disc);
 
+  // Zoomed out to eight times, the aircraft is two pixels of dark green on a hillside. This
+  // ring sits on the ground beneath it and grows with the view, so you can always find
+  // yourself. It is a marker rather than a bigger helicopter, which is the honest way to
+  // solve it: the machine stays the size it is.
+  const marker = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 40),
+    new THREE.MeshBasicMaterial({ color: 0xf3b25e, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, depthTest: false }));
+  marker.rotation.x = -Math.PI / 2;
+  marker.renderOrder = 6;
+  marker.visible = false;
+  group.add(marker);
+
   // The winch. Five of the twelve contract kinds are things you lower a hook for, and
   // without this the aircraft just hovered while numbers changed. The cable geometry hangs
   // from its own origin so paying it out is a scale on one axis.
@@ -140,7 +152,7 @@ function buildAirframe() {
   body.add(winch);
 
   group.scale.setScalar(0.92);
-  return { group, body, rotor, tail, winch, cable, hook };
+  return { group, body, rotor, tail, winch, cable, hook, marker };
 }
 const heli = buildAirframe();
 scene.add(heli.group);
@@ -163,6 +175,21 @@ const streamer = new ChunkStreamer({
   },
   budget: 2,
 });
+
+// ---------------------------------------------------------------- the far field
+// One coarse mesh of the whole region, so zooming out has something to show beyond the
+// streamed rings. Built off the critical path a moment after the first frame: it costs
+// about ninety milliseconds, and nobody reaches for the zoom that fast.
+let overview = null;
+function buildFarField() {
+  if (overview) return overview;
+  const started = performance.now();
+  overview = buildOverview(world, materials.distant, OVERVIEW_RESOLUTION);
+  overview.ms = +(performance.now() - started).toFixed(1);
+  overview.mesh.visible = zoom > OVERVIEW_FROM;
+  scene.add(overview.mesh);
+  return overview;
+}
 
 // ---------------------------------------------------------------- the yard
 function renderYard() {
@@ -485,6 +512,9 @@ addEventListener('keydown', e => {
   }
   keys.add(e.code);
   if (e.code === 'Escape') { for (const id of ['yard', 'map-panel']) if (!$(id).hidden) $(id).hidden = true; }
+  if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.code === 'BracketLeft') zoomBy(1);
+  if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'BracketRight') zoomBy(-1);
+  if (e.code === 'Digit0' || e.code === 'Numpad0') setZoom(ZOOM_DEFAULT);
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyH') teleportHome();
   if (e.code === 'KeyG') { $('debug').classList.toggle('hidden'); $('outfit').classList.toggle('hidden'); $('hud').classList.toggle('hidden'); }
@@ -557,6 +587,17 @@ function flight(dt) {
 // The kinds that are a hook on a cable rather than a trigger.
 const WINCH_KINDS = new Set(['extraction', 'salvage', 'search', 'delivery', 'sabotage']);
 let cableOut = 0;
+// The ground ring under the aircraft, sized so it stays the same size on screen however
+// far out the view is pulled.
+function updateMarker() {
+  const showing = zoom > 1.35;
+  heli.marker.visible = showing;
+  if (!showing) return;
+  const radius = viewHeight() / 26;
+  heli.marker.scale.setScalar(radius);
+  heli.marker.position.y = world.groundHeight(craft.x, craft.z) - craft.y + 0.6;
+}
+
 function updateWinch(dt) {
   const usable = profile.heli.winch > 0 && mission && WINCH_KINDS.has(mission.kind);
   const running = usable && keys.has('KeyE');
@@ -581,16 +622,55 @@ function updateWeather(dt) {
   const closing = !!mission?.weather;
   const want = closing ? CLOSED : CLEAR;
   const rate = 1 - Math.exp(-0.5 * dt);
-  scene.fog.density += (want.fog - scene.fog.density) * rate;
+  // Fog is tuned for the default view, where it fades the far chunks into a horizon. At
+  // eight times the view the same density would put the whole region behind a wall of it,
+  // so it thins as you pull back and the region stays legible.
+  const reach = want.fog / (1 + (zoom - 1) * 0.62);
+  scene.fog.density += (reach - scene.fog.density) * rate;
   sun.intensity += (want.sun - sun.intensity) * rate;
   skyColour.setHex(want.sky); fogColour.setHex(want.tint);
   scene.background.lerp(skyColour, rate);
   scene.fog.color.lerp(fogColour, rate);
 }
 
+// ---------------------------------------------------------------- zoom
+// Eight steps of half a stop each, so the far end is exactly eight times the default view:
+// a hundred metres of ground across the screen at the near end, eight hundred at the far.
+// The near step is a little closer than the default, for looking at what you are hovering
+// over.
+const ZOOM_STEPS = [0.7, 1, 1.41, 2, 2.83, 4, 5.66, 8];
+const ZOOM_DEFAULT = 1;
+// Past this the streamed rings no longer reach the edge of the frame, so the coarse region
+// mesh carries the far field. It is built once and always present, so crossing this costs
+// nothing.
+const OVERVIEW_FROM = 1.3;
+let zoomStep = ZOOM_DEFAULT;
+let zoom = ZOOM_STEPS[zoomStep];
+
+const baseView = () => 104 + Math.hypot(craft.vx, craft.vz) * 0.55;
+// How much ground the frame covers vertically, in world units. The map reads this to draw
+// the view rectangle, so the two can never disagree about what you can see.
+function viewHeight() { return baseView() * zoom; }
+
+function setZoom(step, snap = false) {
+  zoomStep = clamp(step, 0, ZOOM_STEPS.length - 1);
+  if (snap) zoom = ZOOM_STEPS[zoomStep];
+  const across = Math.round(viewHeight() * (innerWidth / innerHeight) * WORLD.metresPerUnit);
+  flash(`VIEW ${ZOOM_STEPS[zoomStep].toFixed(2).replace(/0$/, '')}× · ${(across / 1000).toFixed(1)} KM ACROSS`);
+  paintMap();
+}
+const zoomBy = delta => setZoom(zoomStep + delta);
+
+addEventListener('wheel', event => {
+  if (overlayOpen()) return;
+  event.preventDefault();
+  zoomBy(event.deltaY > 0 ? 1 : -1);
+}, { passive: false });
+
 function updateCamera(dt, snap = false) {
-  const speed = Math.hypot(craft.vx, craft.vz);
-  const view = 104 + speed * 0.55;
+  // Zoom eases towards the chosen step, so a wheel click is a movement rather than a jump.
+  zoom += (ZOOM_STEPS[zoomStep] - zoom) * (snap ? 1 : 1 - Math.exp(-7 * dt));
+  const view = viewHeight();
   const aspect = innerWidth / innerHeight;
   camera.left = -view * aspect / 2; camera.right = view * aspect / 2;
   camera.top = view / 2; camera.bottom = -view / 2;
@@ -603,16 +683,35 @@ function updateCamera(dt, snap = false) {
   const floor = world.groundHeight(craft.x, craft.z);
   const target = new THREE.Vector3(craft.x + craft.vx * 0.5, floor, craft.z + craft.vz * 0.5);
   if (snap) cameraFocus.copy(target); else cameraFocus.lerp(target, 1 - Math.exp(-4 * dt));
-  camera.position.copy(cameraFocus).add(cameraOffset);
+  // The camera pulls back as it zooms out. An orthographic projection does not care how
+  // far away it is, but the clip planes do: without this a mountain at the edge of a wide
+  // frame falls in front of the near plane and is sliced off.
+  const pull = 1 + (zoom - 1) * 0.85;
+  camera.position.copy(cameraFocus).addScaledVector(cameraOffset, pull);
+  camera.near = 0.5;
+  camera.far = 900 * Math.max(1, pull * 1.2);
   camera.lookAt(cameraFocus);
+  camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   // The shadow camera tracks the aircraft in quantised steps to keep shadows from crawling,
-  // and rises with the focus so the frustum still covers the ground it is lighting.
-  const sx = Math.round(cameraFocus.x / 4) * 4, sz = Math.round(cameraFocus.z / 4) * 4;
-  const sy = Math.round(cameraFocus.y / 4) * 4;
+  // and rises with the focus so the frustum still covers the ground it is lighting. It
+  // widens with the zoom up to a point; past that the shadow map would be spread so thin
+  // that a rotor shadow is a single texel, so it stops growing and simply covers less of
+  // what you can see, which is invisible at that scale.
+  const spread = 110 * Math.min(zoom, 3.2);
+  if (sun.shadow.camera.right !== spread) {
+    Object.assign(sun.shadow.camera, { left: -spread, right: spread, top: spread, bottom: -spread });
+    sun.shadow.camera.updateProjectionMatrix();
+  }
+  const quantum = Math.max(4, Math.round(zoom) * 4);
+  const sx = Math.round(cameraFocus.x / quantum) * quantum, sz = Math.round(cameraFocus.z / quantum) * quantum;
+  const sy = Math.round(cameraFocus.y / quantum) * quantum;
   sun.position.set(sx - 90, sy + 150, sz + 80);
   sun.target.position.set(sx, sy, sz);
   sun.target.updateMatrixWorld();
+  // The coarse region mesh is the far field once the streamed rings stop reaching the edge
+  // of the frame.
+  if (overview) overview.mesh.visible = zoom > OVERVIEW_FROM;
 }
 
 // ---------------------------------------------------------------- post
@@ -642,62 +741,195 @@ function resize() {
 }
 addEventListener('resize', resize);
 
-// ---------------------------------------------------------------- world map
+// ---------------------------------------------------------------- region map
+// The map is the only place you see the whole hundred square kilometres at once, so it has
+// to read as terrain rather than as a colour key. Three things make that work: a hillshade
+// computed from the height lattice so ridges and valleys are visible, faction territory as
+// a light tint plus a drawn border rather than the heavy wash that used to bury the ground,
+// and label placement that refuses to overlap.
 const mapCanvas = $('map');
-let mapDrawn = false;
-function drawMap() {
-  const ctx = mapCanvas.getContext('2d');
-  const size = mapCanvas.width;
-  const image = ctx.createImageData(size, size);
-  const tmp = new THREE.Color();
-  for (let py = 0; py < size; py++) {
-    for (let px = 0; px < size; px++) {
-      const x = (px / size - 0.5) * WORLD.size, z = (py / size - 0.5) * WORLD.size;
-      const b = world.biomeAt(x, z);
-      tmp.set(BIOMES[b].colour);
-      let r = tmp.r, g = tmp.g, bl = tmp.b;
-      if (b !== 0) {
-        const f = world.factionAt(x, z);
-        if (f >= 0) {
-          const ft = new THREE.Color(FACTIONS[f].colour);
-          r = r * 0.74 + ft.r * 0.26; g = g * 0.74 + ft.g * 0.26; bl = bl * 0.74 + ft.b * 0.26;
-        }
-        const shade = clamp(0.72 + world.elevation(x, z) / 150, 0.55, 1.25);
-        r *= shade; g *= shade; bl *= shade;
+// The static map is drawn once into an offscreen canvas; the visible canvas is that image
+// plus the things that move. Before this the aircraft marker was painted straight onto the
+// map every frame, which only looked right because nothing is allowed to move while it is
+// open.
+const mapBase = document.createElement('canvas');
+let mapDrawn = false, mapMs = 0;
+
+// Fields are sampled every other pixel and the shade interpolated between, which is
+// invisible at this scale and four times less work: the old version sampled all 384,000
+// pixels and parsed a CSS colour string for two of them each time.
+const MAP_STEP = 2;
+const MAP_LIGHT = (() => {
+  const v = { x: -0.55, y: 0.62, z: -0.56 };
+  const len = Math.hypot(v.x, v.y, v.z);
+  return { x: v.x / len, y: v.y / len, z: v.z / len };
+})();
+const MAP_BIOME_RGB = BIOMES.map(info => { const c = new THREE.Color(info.colour); return [c.r, c.g, c.b]; });
+const MAP_FACTION_RGB = FACTIONS.map(f => { const c = new THREE.Color(f.colour); return [c.r, c.g, c.b]; });
+
+// Places a label near a point, trying a few offsets and giving up rather than overlapping
+// something already drawn. Callers go in priority order: regions, then landmarks, then the
+// larger settlements, so a town beats an outpost for the space.
+function labeller(ctx) {
+  const taken = [];
+  const clear = box => !taken.some(t => box[0] < t[2] && box[2] > t[0] && box[1] < t[3] && box[3] > t[1]);
+  return (text, x, y, { font, colour, centre = false, halo = 0 } = {}) => {
+    ctx.font = font;
+    const w = ctx.measureText(text).width;
+    const offsets = centre
+      ? [[-w / 2, 3], [-w / 2, -9], [-w / 2, 14], [-w / 2, -21], [-w / 2, 26]]
+      : [[7, 3], [-w - 7, 3], [-w / 2, -8], [-w / 2, 14]];
+    for (const [dx, dy] of offsets) {
+      const box = [x + dx - 2, y + dy - 9, x + dx + w + 2, y + dy + 3];
+      if (!clear(box)) continue;
+      taken.push(box);
+      // A halo rather than a drop shadow for the region names: they are drawn in their own
+      // tint, which on the ground that tint describes is nearly the same colour.
+      if (halo) {
+        ctx.strokeStyle = 'rgba(9,20,18,.85)';
+        ctx.lineWidth = halo;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(text, x + dx, y + dy);
+      } else {
+        ctx.fillStyle = 'rgba(9,20,18,.8)';
+        ctx.fillText(text, x + dx + 1, y + dy + 1);
       }
-      const i = (py * size + px) * 4;
-      image.data[i] = clamp(r, 0, 1) * 255; image.data[i + 1] = clamp(g, 0, 1) * 255;
-      image.data[i + 2] = clamp(bl, 0, 1) * 255; image.data[i + 3] = 255;
+      ctx.fillStyle = colour;
+      ctx.fillText(text, x + dx, y + dy);
+      return true;
+    }
+    return false;
+  };
+}
+
+function drawMap() {
+  const started = performance.now();
+  const size = mapCanvas.width;
+  mapBase.width = size; mapBase.height = size;
+  const ctx = mapBase.getContext('2d');
+  const lattice = Math.ceil(size / MAP_STEP) + 1;
+  const unitsPerNode = WORLD.size / size * MAP_STEP;
+  const height = new Float32Array(lattice * lattice);
+  const biome = new Uint8Array(lattice * lattice);
+  const owner = new Int8Array(lattice * lattice);
+
+  // One pass of the fields. Height is computed once and handed to the derived fields rather
+  // than being recomputed inside each of them.
+  for (let j = 0; j < lattice; j++) {
+    for (let i = 0; i < lattice; i++) {
+      const x = (i * MAP_STEP / size - 0.5) * WORLD.size;
+      const z = (j * MAP_STEP / size - 0.5) * WORLD.size;
+      const h = world.elevation(x, z);
+      const k = j * lattice + i;
+      height[k] = h;
+      biome[k] = world.classify(h, world.moisture(x, z, h), world.temperature(x, z, h));
+      owner[k] = h > WORLD.seaLevel ? world.factionAt(x, z) : -1;
+    }
+  }
+
+  // Hillshade straight off the lattice: no extra field samples, and it is what turns a
+  // patchwork of biome colours into something you can read as country.
+  const shade = new Float32Array(lattice * lattice);
+  const exaggeration = 2.4;
+  for (let j = 0; j < lattice; j++) {
+    for (let i = 0; i < lattice; i++) {
+      const k = j * lattice + i;
+      const east = height[j * lattice + Math.min(i + 1, lattice - 1)];
+      const west = height[j * lattice + Math.max(i - 1, 0)];
+      const south = height[Math.min(j + 1, lattice - 1) * lattice + i];
+      const north = height[Math.max(j - 1, 0) * lattice + i];
+      const nx = -(east - west) / (2 * unitsPerNode) * exaggeration;
+      const nz = -(south - north) / (2 * unitsPerNode) * exaggeration;
+      const len = Math.hypot(nx, 1, nz);
+      const lambert = (nx * MAP_LIGHT.x + MAP_LIGHT.y + nz * MAP_LIGHT.z) / len;
+      // Water is left flat; only land is lit.
+      shade[k] = height[k] <= WORLD.seaLevel ? 1 : 0.62 + clamp(lambert, -1, 1) * 0.46;
+    }
+  }
+
+  const image = ctx.createImageData(size, size);
+  const data = image.data;
+  for (let py = 0; py < size; py++) {
+    const fj = py / MAP_STEP, j0 = Math.min(Math.floor(fj), lattice - 2), tj = fj - j0;
+    for (let px = 0; px < size; px++) {
+      const fi = px / MAP_STEP, i0 = Math.min(Math.floor(fi), lattice - 2), ti = fi - i0;
+      const k = j0 * lattice + i0;
+      const rgb = MAP_BIOME_RGB[biome[k]];
+      let r = rgb[0], g = rgb[1], b = rgb[2];
+      const faction = owner[k];
+      if (faction >= 0) {
+        // A light tint: enough to tell you whose ground it is, not enough to hide it.
+        const ft = MAP_FACTION_RGB[faction];
+        r = r * 0.84 + ft[0] * 0.16; g = g * 0.84 + ft[1] * 0.16; b = b * 0.84 + ft[2] * 0.16;
+      }
+      // Bilinear on the shade only, so biome edges stay crisp while the relief is smooth.
+      const s00 = shade[k], s10 = shade[k + 1];
+      const s01 = shade[k + lattice], s11 = shade[k + lattice + 1];
+      const a = s00 + (s10 - s00) * ti, c = s01 + (s11 - s01) * ti;
+      const lit = a + (c - a) * tj;
+      const at = (py * size + px) * 4;
+      data[at] = clamp(r * lit, 0, 1) * 255;
+      data[at + 1] = clamp(g * lit, 0, 1) * 255;
+      data[at + 2] = clamp(b * lit, 0, 1) * 255;
+      data[at + 3] = 255;
     }
   }
   ctx.putImageData(image, 0, 0);
+
   const toMap = (x, z) => [(x / WORLD.size + 0.5) * size, (z / WORLD.size + 0.5) * size];
 
-  // Region names first, underneath everything else, so the map reads as nine places before
-  // it reads as a list of villages.
-  ctx.textAlign = 'center';
-  for (const region of world.regions.regions) {
-    const [rx, ry] = toMap(region.x, region.z);
-    ctx.font = '700 11px "Barlow Condensed", Barlow, sans-serif';
-    ctx.fillStyle = 'rgba(12,26,24,.55)';
-    ctx.fillText(region.name, rx + 1, ry + 1);
-    ctx.fillStyle = region.colour;
-    ctx.fillText(region.name, rx, ry);
-  }
-  ctx.textAlign = 'left';
-
-  for (const site of world.allSettlements()) {
-    const [mx, my] = toMap(site.x, site.z);
-    ctx.fillStyle = FACTIONS[site.faction].colour;
-    const r = site.kind === 'town' ? 4 : site.kind === 'village' ? 3 : 2.4;
-    ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill();
-    if (site.kind === 'town' || site.kind === 'airfield') {
-      ctx.fillStyle = '#edeedf'; ctx.font = '600 9px Barlow, sans-serif';
-      ctx.fillText(site.name, mx + 6, my + 3);
+  // Coastline and faction borders, both traced off the lattice. A drawn border says
+  // somebody holds this ground far better than tinting all of it does.
+  for (let j = 1; j < lattice - 1; j++) {
+    for (let i = 1; i < lattice - 1; i++) {
+      const k = j * lattice + i;
+      const px = i * MAP_STEP, py = j * MAP_STEP;
+      const wet = height[k] <= WORLD.seaLevel;
+      if (wet !== (height[k + 1] <= WORLD.seaLevel) || wet !== (height[k + lattice] <= WORLD.seaLevel)) {
+        ctx.fillStyle = 'rgba(232,240,214,.5)';
+        ctx.fillRect(px, py, MAP_STEP, MAP_STEP);
+      } else if (!wet && owner[k] >= 0 && (owner[k] !== owner[k + 1] || owner[k] !== owner[k + lattice])) {
+        ctx.fillStyle = FACTIONS[owner[k]].colour + 'b0';
+        ctx.fillRect(px, py, MAP_STEP, MAP_STEP);
+      }
     }
   }
-  // Landmarks get a diamond and a name at any zoom: one per region, and the only thing on
-  // the map you can reliably find again from the air.
+
+  // A kilometre grid and a scale bar, because ten by ten kilometres should be something you
+  // can measure off the map rather than something you are told in the header.
+  ctx.strokeStyle = 'rgba(232,240,214,.10)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let km = 1; km < 10; km++) {
+    const at = km / 10 * size;
+    ctx.moveTo(at, 0); ctx.lineTo(at, size);
+    ctx.moveTo(0, at); ctx.lineTo(size, at);
+  }
+  ctx.stroke();
+  const barKm = 2, barPx = barKm / 10 * size;
+  ctx.fillStyle = 'rgba(9,20,18,.62)';
+  ctx.fillRect(14, size - 32, barPx + 18, 22);
+  ctx.strokeStyle = '#edeedf'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(22, size - 15); ctx.lineTo(22 + barPx, size - 15);
+  ctx.moveTo(22, size - 19); ctx.lineTo(22, size - 11);
+  ctx.moveTo(22 + barPx, size - 19); ctx.lineTo(22 + barPx, size - 11);
+  ctx.stroke();
+  ctx.font = '600 8px Barlow, sans-serif';
+  ctx.fillStyle = '#edeedf';
+  ctx.fillText(barKm + ' KM', 26, size - 22);
+
+  const place = labeller(ctx);
+
+  // Regions first: they are the biggest thing on the map and the labels that matter most.
+  for (const region of world.regions.regions) {
+    const [rx, ry] = toMap(region.x, region.z);
+    place(region.name, rx, ry, {
+      font: '700 11px "Barlow Condensed", Barlow, sans-serif', colour: region.colour, centre: true, halo: 3.2,
+    });
+  }
+
+  // Landmarks: a diamond and a name, and they never lose their label to a village.
   for (const mark of world.landmarks()) {
     const [mx, my] = toMap(mark.x, mark.z);
     ctx.save();
@@ -707,37 +939,84 @@ function drawMap() {
     ctx.strokeStyle = '#1c2a26'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.rect(-3.4, -3.4, 6.8, 6.8); ctx.fill(); ctx.stroke();
     ctx.restore();
-    ctx.font = '700 9px Barlow, sans-serif';
-    ctx.fillStyle = 'rgba(12,26,24,.7)';
-    ctx.fillText(mark.short, mx + 8, my + 4);
-    ctx.fillStyle = '#f4edc9';
-    ctx.fillText(mark.short, mx + 7, my + 3);
+    place(mark.short, mx, my, { font: '700 9px Barlow, sans-serif', colour: '#f4edc9', halo: 2.6 });
+  }
+
+  // Settlements: every one gets a dot, and a name if there is room for it.
+  const order = { town: 0, airfield: 1, port: 2, refinery: 3, village: 4, camp: 5, outpost: 6 };
+  const sites = world.allSettlements().slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
+  for (const site of sites) {
+    const [mx, my] = toMap(site.x, site.z);
+    ctx.fillStyle = FACTIONS[site.faction].colour;
+    ctx.strokeStyle = 'rgba(9,20,18,.7)'; ctx.lineWidth = 1;
+    const r = site.kind === 'town' ? 3.6 : site.kind === 'village' ? 2.8 : 2.2;
+    ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  for (const site of sites) {
+    if (!['town', 'airfield', 'port', 'refinery'].includes(site.kind)) continue;
+    const [mx, my] = toMap(site.x, site.z);
+    place(site.name, mx, my, { font: '600 8px Barlow, sans-serif', colour: '#dfe6d2' });
+  }
+
+  mapDrawn = true;
+  mapMs = performance.now() - started;
+}
+
+// The static map plus everything that moves: your yard, the aircraft, what the camera can
+// see, and the job in hand.
+function paintMap() {
+  if ($('map-panel').hidden || !mapDrawn) return;
+  const size = mapCanvas.width;
+  const ctx = mapCanvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  ctx.drawImage(mapBase, 0, 0);
+  const toMap = (x, z) => [(x / WORLD.size + 0.5) * size, (z / WORLD.size + 0.5) * size];
+  const [px, py] = toMap(craft.x, craft.z);
+
+  // The job in hand, so the map answers where am I going as well as where am I.
+  if (profile.active) {
+    const [cx, cy] = toMap(profile.active.site.x, profile.active.site.z);
+    ctx.strokeStyle = 'rgba(243,178,94,.45)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 1.6;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   const [hx, hy] = toMap(home.x, home.z);
   ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(hx - 11, hy); ctx.lineTo(hx + 11, hy); ctx.moveTo(hx, hy - 11); ctx.lineTo(hx, hy + 11); ctx.stroke();
-  mapDrawn = true;
+  ctx.beginPath();
+  ctx.moveTo(hx - 11, hy); ctx.lineTo(hx + 11, hy);
+  ctx.moveTo(hx, hy - 11); ctx.lineTo(hx, hy + 11);
+  ctx.stroke();
+
+  // What the camera can actually see right now, which is how the zoom reads on the map.
+  const halfZ = viewHeight() / 2 / WORLD.size * size;
+  const halfX = halfZ * (innerWidth / innerHeight);
+  ctx.strokeStyle = 'rgba(244,237,201,.34)'; ctx.lineWidth = 1;
+  ctx.strokeRect(px - halfX, py - halfZ, halfX * 2, halfZ * 2);
+
+  ctx.save();
+  ctx.translate(px, py);
+  ctx.rotate(craft.yaw);
+  ctx.fillStyle = '#f4edc9';
+  ctx.strokeStyle = '#1c2a26'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, -7); ctx.lineTo(4.5, 5.5); ctx.lineTo(0, 2.5); ctx.lineTo(-4.5, 5.5);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
 }
+
 function toggleMap() {
   const panel = $('map-panel');
   panel.hidden = !panel.hidden;
-  if (!panel.hidden && !mapDrawn) drawMap();
+  if (panel.hidden) return;
+  if (!mapDrawn) drawMap();
+  paintMap();
 }
 $('map-close').addEventListener('click', toggleMap);
-
-// marks the aircraft on the map each time it is opened
-function markCraft() {
-  if ($('map-panel').hidden || !mapDrawn) return;
-  const size = mapCanvas.width;
-  const ctx = mapCanvas.getContext('2d');
-  const mx = (craft.x / WORLD.size + 0.5) * size, my = (craft.z / WORLD.size + 0.5) * size;
-  ctx.save(); ctx.translate(mx, my); ctx.rotate(craft.yaw);
-  ctx.fillStyle = '#f4edc9'; ctx.beginPath();
-  ctx.moveTo(0, -6); ctx.lineTo(4, 5); ctx.lineTo(0, 2); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
-  ctx.restore();
-}
 
 // ---------------------------------------------------------------- loop
 let last = 0, frames = 0, fpsAccum = 0, fps = 60, clock = 0, buildHitch = 0;
@@ -780,6 +1059,7 @@ function frame(now) {
   heli.tail.rotation.x = clock * 44;
   seaTime.value = clock;
   updateWinch(dt);
+  updateMarker();
   updateWeather(dt);
   audio.update(Math.hypot(craft.vx, craft.vz), 'playing');
 
@@ -790,7 +1070,7 @@ function frame(now) {
   updateActive(dt);
   if ($('flash') && !$('flash').hidden && performance.now() > flashUntil) $('flash').hidden = true;
   if (Math.floor(clock * 4) % 2 === 0) updateReadout(streamed);
-  markCraft();
+  paintMap();
 }
 
 function updateReadout(streamed) {
@@ -817,6 +1097,8 @@ function updateReadout(streamed) {
   $('geometry').textContent = `${residentMeshes} meshes · ${Math.round(residentTriangles / 1000)}k triangles held`;
   $('draw').textContent = `${renderer.info.render.calls} calls · ${Math.round(renderer.info.render.triangles / 1000)}k drawn`;
   $('fps').textContent = `${Math.round(fps)} fps · stream ${buildHitch.toFixed(1)} ms/frame`;
+  const across = viewHeight() * (innerWidth / innerHeight) * WORLD.metresPerUnit / 1000;
+  $('view').textContent = `${ZOOM_STEPS[zoomStep].toFixed(2).replace(/0$/, '')}× · ${across.toFixed(2)} km across`;
   $('armour').textContent = Math.round(combat.armour);
   $('armour-bar').style.width = Math.round(combat.armour / combat.maxArmour * 100) + '%';
   $('armour-bar').style.background = combat.armour < combat.maxArmour * 0.3 ? '#ff8060' : '#b9d7b3';
@@ -839,6 +1121,7 @@ try {
   $('loading').hidden = true;
   if (!returning) showIntro();
   requestAnimationFrame(frame);
+  setTimeout(buildFarField, 0);
 } catch (error) {
   console.error(error);
   $('loading').innerHTML = `<p>WORLD FAILED TO START</p><small>${error.message}</small>`;
@@ -868,6 +1151,9 @@ window.merc = {
     fog: +scene.fog.density.toFixed(5),
     cable: +cableOut.toFixed(2),
     intro: !$('intro').hidden,
+    zoom: +zoom.toFixed(2), zoomStep, viewAcross: Math.round(viewHeight() * (innerWidth / innerHeight)),
+    overview: overview ? { visible: overview.mesh.visible, triangles: overview.triangles, ms: overview.ms } : null,
+    mapMs: +mapMs.toFixed(0),
     // Clearance of the camera above the ground beneath it. Negative means the frame is
     // being rendered from inside a hill, which is what happened on an alpine summit while
     // the focus was pinned to sea level.
@@ -877,6 +1163,10 @@ window.merc = {
   marks: () => world.landmarks().map(m => ({ key: m.key, short: m.short, x: m.x, z: m.z,
     height: +m.height.toFixed(1), region: m.region })),
   intro: () => { showIntro(); return true; },
+  zoomTo: step => { setZoom(step, true); updateCamera(0, true); return ZOOM_STEPS[zoomStep]; },
+  zoomSteps: () => [...ZOOM_STEPS],
+  farField: () => buildFarField() && { triangles: overview.triangles, vertices: overview.vertices, ms: overview.ms },
+  map: () => { if (!mapDrawn) drawMap(); return { ms: +mapMs.toFixed(0), drawn: mapDrawn }; },
   dismiss: () => { $('intro-go').click(); return true; },
   audio,
   combat, mission: () => mission, profileRef: profile, saveProfile,
@@ -894,6 +1184,7 @@ window.merc = {
       // The same per-frame updates the real loop runs, so what the harness exercises is
       // what the game does rather than a subset of it.
       updateWinch(step);
+      updateMarker();
       updateWeather(step);
       streamer.update(craft.x, craft.z);
     }

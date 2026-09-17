@@ -1,9 +1,9 @@
 {
-  "name": "blockhawk-signal-storm",
+  "name": "mercenary-strike",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "An offline, single-file, low-poly helicopter combat game.",
+  "description": "MERCENARY STRIKE: an offline, single-file, streamed 100 km2 open world flown as a helicopter mercenary. Includes the BLOCKHAWK campaign it grew out of.",
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs",

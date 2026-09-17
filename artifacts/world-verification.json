@@ -6,6 +6,9 @@
     "The camera stays above the ground everywhere, including the highest ground in the region",
     "Nine regions with nine landmarks, and the readout changes as you cross them",
     "Every one of the nine landmarks streams in and builds without error",
+    "Eight steps of zoom reach exactly eight times the default view, and the far field fills it",
+    "The coarse region mesh hangs below the streamed terrain instead of through it",
+    "The region map draws inside a frame budget and repaints cleanly",
     "The region map and the yard open, draw and close on real key presses",
     "All twelve kinds of work reach the board and brief the pilot",
     "Holding the winch key lowers a visible cable and hook, and releasing raises it",
@@ -47,7 +50,7 @@
       "draw": 85,
       "drawn": 43285,
       "fps": 60,
-      "streamMs": 0.1,
+      "streamMs": 0.02,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -56,10 +59,19 @@
         "peakResident": 66
       },
       "region": "savanna",
-      "regionNodes": 4508,
+      "regionNodes": 6824,
       "fog": 0.00085,
       "cable": 0,
       "intro": true,
+      "zoom": 1,
+      "zoomStep": 1,
+      "viewAcross": 166,
+      "overview": {
+        "visible": false,
+        "triangles": 131072,
+        "ms": 56.6
+      },
+      "mapMs": 0,
       "cameraClearance": 156.6
     },
     "camera": {
@@ -137,6 +149,107 @@
       "coast",
       "jungle"
     ],
+    "zoom": {
+      "steps": [
+        0.7,
+        1,
+        1.41,
+        2,
+        2.83,
+        4,
+        5.66,
+        8
+      ],
+      "out": [
+        {
+          "step": 0,
+          "zoom": 0.7,
+          "across": 116,
+          "draw": 85,
+          "fog": 0.00097,
+          "overview": false,
+          "clearance": 144.4
+        },
+        {
+          "step": 1,
+          "zoom": 1,
+          "across": 166,
+          "draw": 85,
+          "fog": 0.0009,
+          "overview": false,
+          "clearance": 168.3
+        },
+        {
+          "step": 2,
+          "zoom": 1.41,
+          "across": 235,
+          "draw": 85,
+          "fog": 0.00076,
+          "overview": true,
+          "clearance": 231.1
+        },
+        {
+          "step": 3,
+          "zoom": 2,
+          "across": 333,
+          "draw": 85,
+          "fog": 0.00061,
+          "overview": true,
+          "clearance": 302.4
+        },
+        {
+          "step": 4,
+          "zoom": 2.83,
+          "across": 471,
+          "draw": 85,
+          "fog": 0.00048,
+          "overview": true,
+          "clearance": 401.3
+        },
+        {
+          "step": 5,
+          "zoom": 4,
+          "across": 666,
+          "draw": 85,
+          "fog": 0.00036,
+          "overview": true,
+          "clearance": 542.5
+        },
+        {
+          "step": 6,
+          "zoom": 5.66,
+          "across": 942,
+          "draw": 85,
+          "fog": 0.00027,
+          "overview": true,
+          "clearance": 742.9
+        },
+        {
+          "step": 7,
+          "zoom": 8,
+          "across": 1331,
+          "draw": 85,
+          "fog": 0.0002,
+          "overview": true,
+          "clearance": 1025.3
+        }
+      ],
+      "far": {
+        "visible": false,
+        "triangles": 131072,
+        "ms": 56.6
+      }
+    },
+    "pokeThrough": {
+      "land": 15053,
+      "above": 41,
+      "pct": 0.27237095595562344,
+      "worst": 4.099237456716109
+    },
+    "map": {
+      "ms": 111,
+      "sameTwice": true
+    },
     "briefs": {
       "survey": "HOLD THE SCAN OVER THE SITE",
       "delivery": "SET THE CRATE DOWN ON SITE",
@@ -152,7 +265,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.088359124418056
+      "paidOut": 2.088435618300487
     },
     "job": {
       "cash": 5000,
@@ -184,9 +297,9 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0.02,
+      "worst": 0.03,
       "resident": 35,
-      "nodes": 6190
+      "nodes": 7255
     }
   }
 }

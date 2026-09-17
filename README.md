@@ -1,24 +1,52 @@
-# BLOCKHAWK: Signal Storm
+# MERCENARY STRIKE
 
-An original helicopter combat campaign inspired by the overhead flight, linked objectives, rescue winch and resource management of the **Strike** series. Five operations across a near-future archipelago, one attack helicopter, twenty-six linked objectives and a complete success/failure loop.
+A helicopter mercenary open world: one continuous streamed **100 km² region**, divided into nine
+named areas that each look and fly differently, with five factions who will hire you, twelve
+kinds of contract, and an outfit you build out of a makeshift yard. Nothing is stored — the
+whole region is a pure function of its seed, so `?seed=12345` is a different hundred square
+kilometres.
+
+It grew out of **BLOCKHAWK: Signal Storm**, the five-operation campaign that is still here and
+still playable, and which the open world borrows its flight model, winch and synthesised
+audio from.
 
 ## Play
 
-Play it now at **[new-strike.vercel.app](https://new-strike.vercel.app)**, or open **[dist/blockhawk.html](dist/blockhawk.html)** in Chrome, Edge, Firefox or Samsung Internet with WebGL 2 enabled. This is the complete game: rendering library, models, water, particles, fonts, interface, audio and license notices are embedded. It makes no external requests and works offline. `index.html` and `dist/index.html` are identical copies for convenient serving.
+Play at **[new-strike.vercel.app](https://new-strike.vercel.app)** — or the campaign at
+**[/blockhawk.html](https://new-strike.vercel.app/blockhawk.html)**. Both are single HTML
+files with the rendering library, models, fonts, interface, audio and licence notices
+embedded: they make no external requests and work offline. Open
+**[dist/world.html](dist/world.html)** or **[dist/blockhawk.html](dist/blockhawk.html)**
+directly in Chrome, Edge, Firefox or Samsung Internet with WebGL 2 enabled.
 
 For a local server:
 
 ```powershell
 npm install
-npm run build
+npm run build && npm run build:world
 npm start
 ```
 
-Visit **http://localhost:4189**. To play on a phone on the same Wi-Fi, open `http://<your-PC-LAN-address>:4189` in its browser. Landscape offers the clearest view; portrait is supported too. The single HTML can also be hosted by any static file server.
+Visit **http://localhost:4189** for MERCENARY STRIKE, or **/blockhawk.html** for the campaign.
+The dev server resolves paths the way the deployment does, so a link that works locally works
+live. To play on a phone on the same Wi-Fi, open `http://<your-PC-LAN-address>:4189`.
+
+## MERCENARY STRIKE
+
+`W A S D` fly · `SHIFT` throttle · `SPACE` climb · `C` descend · `SPACE` fire · `E` winch,
+scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=` zoom** · `0` reset the view ·
+`B` the yard · `M` the region map · `H` back to the pad · `G` hide the panels.
+
+The view zooms across **eight steps to eight times the default**, from 650 metres of ground
+across the screen to 7.4 kilometres. Everything past the streamed chunks is one coarse mesh
+of the whole region, built once, so pulling back never stalls.
+
+The full design and its measurements are in **[MERCENARY.md](MERCENARY.md)**: the region layer,
+the nine landmarks, the streamer, combat, the twelve contract kinds and the verification.
 
 ## Deploy
 
-The build output is a plain static directory, so any static host works. This repository ships a `vercel.json` that sets the build command to `npm run build` and the output directory to `dist/`, which holds `index.html` (served at `/`) and the identical `blockhawk.html`. No serverless functions, rewrites or environment variables are needed.
+The build output is a plain static directory, so any static host works. This repository ships a `vercel.json` that sets the build command to `npm run build && npm run build:world` and the output directory to `dist/`, which holds `index.html` and `world.html` (MERCENARY STRIKE, served at `/` and `/world.html`) alongside `blockhawk.html` (the campaign). No serverless functions, rewrites or environment variables are needed.
 
 ```powershell
 vercel --prod
@@ -26,7 +54,7 @@ vercel --prod
 
 Importing the repository in the Vercel dashboard needs no extra configuration; `vercel.json` supplies it. The GitHub repository is connected to the Vercel project, so pushes to `main` deploy to **https://new-strike.vercel.app** automatically.
 
-## Controls
+## Campaign controls
 
 | Action | Desktop | Touch |
 | --- | --- | --- |
@@ -42,16 +70,13 @@ Importing the repository in the Vercel dashboard needs no extra configuration; `
 | Pause | Esc or P | Pause button |
 | Field manual / mute | H / V | Top buttons |
 
-## What is next: MERCENARY STRIKE
+## BLOCKHAWK: Signal Storm — the campaign
 
-An open-world successor is being built alongside this campaign: a single streamed 100 km²
-region divided into **nine distinct named areas**, each with its own terrain character and one
-unmistakable landmark, holding eight biomes, five factions, twelve kinds of contract and a
-mercenary outfit you build from a makeshift yard. The generator, chunk streamer, region
-layer, combat and contract backend are in and tested — 122 module checks and 13 browser
-checks. See [MERCENARY.md](MERCENARY.md) and run `npm run world`.
-
-The campaign below is untouched: it still builds to the byte and its 19 browser checks pass.
+An original helicopter combat campaign inspired by the overhead flight, linked objectives,
+rescue winch and resource management of the **Strike** series. Five operations across a
+near-future archipelago, one attack helicopter, twenty-six linked objectives and a complete
+success/failure loop. Served at **/blockhawk.html**, unchanged: it still builds to the byte
+and its 19 browser checks pass.
 
 ## The campaign
 

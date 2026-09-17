@@ -343,7 +343,8 @@ export function createWorld(seed = 20492) {
             kind: kind.key, kindName: kind.name, pads: kind.pads,
             threat: clamp(kind.threat + Math.round(threatBias), 0, 4),
             radius: Math.round(lerp(kind.size[0], kind.size[1], sizeRoll)),
-            name: `${head} ${tail}`, biome: b, faction: factionAt(x, z),
+            name: `${head} ${tail}`, baseName: `${head} ${tail}`,
+            biome: b, faction: factionAt(x, z),
             height: h, coastal,
             region: region.key, regionName: region.name, regionIndex: region.index,
           };
@@ -354,7 +355,27 @@ export function createWorld(seed = 20492) {
     return result;
   }
 
+  // Names come from a per-cell hash, so with four hundred combinations and fifty-odd
+  // settlements the same name landed twice on most seeds — two IRON SOUNDs on one map reads
+  // as a bug rather than as geography. One deterministic pass over the region in cell order
+  // qualifies the later ones. It mutates the cached records, so every consumer sees the
+  // same answer whichever way it asked.
+  const QUALIFIER = ['', 'LOWER ', 'UPPER ', 'OLD ', 'NEW ', 'LITTLE ', 'GREAT '];
+  let namesResolved = false;
+  function resolveNames() {
+    if (namesResolved) return;
+    namesResolved = true;                 // set first: the sweep below calls back in here
+    const seen = new Map();
+    for (const site of allSettlements()) {
+      const taken = seen.get(site.baseName) ?? 0;
+      seen.set(site.baseName, taken + 1);
+      if (!taken) continue;
+      site.name = (QUALIFIER[taken] ?? `${taken + 1} `) + site.baseName;
+    }
+  }
+
   function settlementsNear(x, z, radius) {
+    resolveNames();
     const found = [];
     const c0 = Math.floor((x - radius) / WORLD.cell), c1 = Math.floor((x + radius) / WORLD.cell);
     const r0 = Math.floor((z - radius) / WORLD.cell), r1 = Math.floor((z + radius) / WORLD.cell);
@@ -366,6 +387,7 @@ export function createWorld(seed = 20492) {
   }
 
   function allSettlements() {
+    resolveNames();
     const cells = Math.ceil(WORLD.size / WORLD.cell);
     const half = Math.ceil(cells / 2), out = [];
     for (let cz = -half; cz <= half; cz++) for (let cx = -half; cx <= half; cx++) {

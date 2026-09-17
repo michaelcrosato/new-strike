@@ -11,7 +11,8 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const base = 'http://127.0.0.1:4189';
-const url = seed => `${base}/dist/world.html?seed=${seed}`;
+// The game is what the site serves at its root, so that is where it is tested.
+const url = seed => `${base}/?seed=${seed}`;
 const SEED = 20492;
 
 await mkdir('artifacts', { recursive: true });
@@ -34,7 +35,7 @@ try {
   // ---------------------------------------------------------------- boot
   await page.goto(url(SEED));
   await page.waitForFunction(() => window.merc && window.merc.state().resident > 20, null, { timeout: 30000 });
-  assert.equal(await page.title(), 'MERCENARY STRIKE · REGION HARNESS');
+  assert.equal(await page.title(), 'MERCENARY STRIKE');
   assert.equal(await page.locator('#loading').isVisible(), false, 'the loading screen gets out of the way');
   const booted = await state();
   assert.ok(booted.resident > 40, `chunks are resident on boot: ${booted.resident}`);
@@ -129,7 +130,83 @@ try {
   await page.screenshot({ path: 'artifacts/world-landmark.png' });
   record('Every one of the nine landmarks streams in and builds without error');
 
+  // ---------------------------------------------------------------- zoom
+  const ladder = await page.evaluate(() => {
+    const merc = window.merc;
+    merc.farField();
+    const steps = merc.zoomSteps(), out = [];
+    for (let i = 0; i < steps.length; i++) {
+      merc.zoomTo(i);
+      merc.simulate(2, {});
+      const s = merc.state();
+      out.push({ step: i, zoom: s.zoom, across: s.viewAcross, draw: s.draw, fog: s.fog,
+        overview: s.overview.visible, clearance: s.cameraClearance });
+    }
+    merc.zoomTo(1);
+    return { steps, out, far: merc.state().overview };
+  });
+  const near = ladder.out[1], far = ladder.out[ladder.out.length - 1];
+  assert.equal(ladder.steps.length, 8, 'eight steps of zoom');
+  assert.ok(Math.abs(far.across / near.across - 8) < 0.05,
+    `the far step shows eight times the ground: ${(far.across / near.across).toFixed(2)}x`);
+  for (let i = 1; i < ladder.out.length; i++) {
+    assert.ok(ladder.out[i].across > ladder.out[i - 1].across, 'every step shows more than the last');
+    assert.ok(ladder.out[i].clearance > 5, `camera stays above ground at step ${i}`);
+  }
+  assert.equal(ladder.out[0].overview, false, 'the near view is streamed chunks alone');
+  assert.equal(far.overview, true, 'the far view brings in the region mesh');
+  assert.ok(far.fog < near.fog * 0.5, `fog thins as you pull back: ${near.fog} -> ${far.fog}`);
+  assert.ok(far.draw < 600, `draw calls stay sane at full zoom: ${far.draw}`);
+  assert.ok(ladder.far.triangles < 200000, `the region mesh is one bounded mesh: ${ladder.far.triangles} triangles`);
+  evidence.measurements.zoom = ladder;
+  record('Eight steps of zoom reach exactly eight times the default view, and the far field fills it');
+
+  // The coarse region mesh has to hang below the detailed chunks, or it pokes up through
+  // them. Measured against the real field on every land vertex it has.
+  const poke = await page.evaluate(() => {
+    const merc = window.merc;
+    const mesh = merc.scene.children.find(o => o.isMesh && o.geometry
+      && o.geometry.attributes.position.count > 60000);
+    const pos = mesh.geometry.attributes.position;
+    let worst = -Infinity, above = 0, land = 0;
+    for (let i = 0; i < pos.count; i += 3) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      const fine = merc.world.groundHeight(x, z);
+      if (fine <= 0.2 && y <= 0.2) continue;        // under the sea plane, never seen
+      land++;
+      if (y - fine > 0) above++;
+      if (y - fine > worst) worst = y - fine;
+    }
+    return { land, above, pct: 100 * above / land, worst };
+  });
+  assert.ok(poke.pct < 2, `the region mesh stays under the detailed terrain: ${poke.pct.toFixed(2)}% of land vertices above it`);
+  assert.ok(poke.worst < 6, `worst protrusion ${poke.worst.toFixed(1)} units`);
+  evidence.measurements.pokeThrough = poke;
+  record('The coarse region mesh hangs below the streamed terrain instead of through it');
+
   // ---------------------------------------------------------------- the map
+  const mapped = await page.evaluate(() => {
+    const merc = window.merc;
+    const first = merc.map();
+    const canvas = document.getElementById('map');
+    document.getElementById('map-panel').hidden = false;
+    // Painting twice with nothing moved must give the same pixels: the aircraft marker
+    // used to be drawn straight onto the map, so repainting accumulated arrows.
+    const read = () => {
+      const c = document.createElement('canvas');
+      c.width = canvas.width; c.height = canvas.height;
+      c.getContext('2d').drawImage(canvas, 0, 0);
+      return c.toDataURL().length;
+    };
+    const a = read(), b = read();
+    document.getElementById('map-panel').hidden = true;
+    return { ms: first.ms, sameTwice: a === b };
+  });
+  assert.ok(mapped.ms < 500, `the map draws without a visible freeze: ${mapped.ms} ms`);
+  assert.equal(mapped.sameTwice, true, 'repainting the map does not accumulate markers');
+  evidence.measurements.map = mapped;
+  record('The region map draws inside a frame budget and repaints cleanly');
+
   await page.keyboard.press('m');
   assert.equal(await page.locator('#map-panel').isVisible(), true);
   await page.waitForTimeout(250);

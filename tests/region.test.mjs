@@ -254,3 +254,34 @@ test('landmarks reach the contract board as places worth flying to', () => {
   assert.ok(marks.every(m => BIOMES[m.biome]), 'every landmark knows what it is standing in');
   assert.ok(marks.every(m => m.name && m.blurb && m.short), 'and has something to say about itself');
 });
+
+// ---------------------------------------------------------------- place names
+test('no two places in the region share a name', () => {
+  // Names come from a per-cell hash over a few hundred combinations, so with fifty-odd
+  // settlements the same name used to land twice on most seeds. Two IRON SOUNDs on one map
+  // reads as a bug rather than as geography.
+  for (const seed of SEEDS) {
+    const sites = at(seed).allSettlements();
+    const names = sites.map(s => s.name);
+    const duplicates = names.filter((n, i) => names.indexOf(n) !== i);
+    assert.deepEqual(duplicates, [], `seed ${seed} repeats ${duplicates.join(', ')}`);
+    assert.equal(new Set(names).size, sites.length);
+    // The qualifier is a word, not a number, so the map still reads like a place.
+    for (const site of sites) {
+      assert.ok(site.name.endsWith(site.baseName), `${site.name} is still ${site.baseName}`);
+      assert.match(site.name, /^[A-Z ]+$/, `${site.name} reads as a name`);
+    }
+  }
+});
+
+test('a place keeps its name whichever way you ask for it', () => {
+  const world = createWorld(20492);
+  const all = new Map(world.allSettlements().map(s => [s.id, s.name]));
+  // A fresh world asked only through settlementsNear must agree with the full sweep.
+  const fresh = createWorld(20492);
+  for (const site of fresh.settlementsNear(0, 0, WORLD.half * 2)) {
+    assert.equal(site.name, all.get(site.id), `${site.id} agrees between the two paths`);
+  }
+  assert.equal(fresh.settlementInCell(...world.allSettlements()[0].id.slice(1).split('_').map(Number))?.name,
+    all.get(world.allSettlements()[0].id), 'and with a single cell lookup');
+});

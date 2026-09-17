@@ -9,15 +9,19 @@ streamer, the outfit that turns the world into work, the combat that makes it da
 the twelve kinds of job you fly.
 
 ```powershell
-npm run world          # builds dist/world.html and serves it
-npm test               # 122 checks across seven suites
-npm run verify:world   # 13 browser checks against the built bundle (server must be running)
+npm run world          # builds the game and serves it
+npm test               # 124 checks across seven suites
+npm run verify:world   # 17 browser checks against the built bundle (server must be running)
 ```
 
-Open **http://localhost:4189/dist/world.html**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
+Open **http://localhost:4189**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
 `SPACE` fire, `E` winch, scan or mark, `F` flares, `1 2 3` weapons,
+**wheel or `-` `=` zoom**, `0` reset the view,
 `B` the yard, `M` region map, `H` back to the pad, `G` hide the panels.
 `?seed=12345` generates a different region.
+
+MERCENARY STRIKE is what the site serves at its root. The BLOCKHAWK campaign it grew out of
+keeps its own page at `/blockhawk.html`.
 
 A first visit gets a briefing from Quill that describes the region that was actually
 generated — where you are parked, what the nearest landmark is, and what all nine areas are
@@ -164,6 +168,61 @@ they would otherwise recompute:
 Measured around the yard: 66 chunks, 108 meshes, 47,000 triangles held, 51 draw calls a
 frame, 60 fps. After a ten-kilometre corner-to-corner transit: residency bounded, leak zero.
 
+## Zoom and the far field — `src/overview.js`
+
+The view zooms across eight steps, half a stop each, to **exactly eight times the default**:
+650 metres of ground across the screen at the near end, 7.4 kilometres at the far end. Wheel
+or `-` and `=`; `0` returns to the default.
+
+The streamer reaches about 575 metres past the edge of the screen, which is generous at the
+default view and useless the moment you pull back — expanding the rings to cover eight times
+the frame would want thousands of chunks. So the far field is not streamed at all. It is one
+mesh of the entire hundred square kilometres, 131,000 triangles in a single draw call, built
+once in 126 ms a moment after the first frame. The streamed chunks sit on top of it near the
+aircraft and it carries the view everywhere else, which is also why zooming out cannot stall:
+there is nothing to build when you do it.
+
+The one thing that has to be right is that the coarse surface never pokes up through the
+detailed one. Every vertex takes the lowest of itself and its four neighbours and drops a
+little further, and land is never allowed below sea level by that process or the coastline
+would visibly retreat. Measured against the real field on every land vertex it has:
+**0.27% sit above the detailed terrain, and only one of them by more than four units** —
+under two pixels at the zoom where the mesh is visible at all. The browser suite asserts it.
+
+Three other things follow the zoom. The camera pulls back, because an orthographic projection
+does not care how far away it is but the clip planes do. The fog thins, or the same density
+that fades the far chunks into a horizon at the default view would put the whole region behind
+a wall of it. And a ring appears on the ground under the aircraft, sized to stay the same size
+on screen, because at eight times out the machine itself is two pixels of dark green on a
+hillside — a marker rather than a bigger helicopter, so the aircraft stays the size it is.
+
+## The region map
+
+The only place you see all hundred square kilometres at once, so it has to read as terrain
+rather than as a colour key:
+
+- a **hillshade** computed from the height lattice, which is what turns a patchwork of biome
+  colours into country you can read — ridges, valleys and river courses all show
+- **faction territory** as a light tint plus a drawn border, instead of the heavy wash that
+  used to bury the ground underneath it
+- a traced **coastline**, a kilometre **grid** and a **scale bar**, so ten by ten kilometres is
+  something you can measure rather than something the header tells you
+- **label placement that refuses to overlap** — regions first, then landmarks, then the larger
+  settlements, each trying a few offsets and giving up rather than colliding. It used to print
+  SALT WORKS across HOLLOW BASIN.
+- the **job in hand**, your yard, the aircraft, and a rectangle showing what the camera can
+  currently see, so the zoom reads on the map too
+
+Static content is drawn once into an offscreen canvas and the moving parts composited over it;
+before that the aircraft marker was painted straight onto the map every frame, which only
+looked right because nothing is allowed to move while it is open. Sampling the fields every
+other pixel and resolving the palettes once took the draw from **840 ms to 266 ms**.
+
+Place names are unique now, too. They come from a per-cell hash over a few hundred
+combinations, so with fifty-odd settlements the same name landed twice on most seeds — two
+IRON SOUNDs on one map reads as a bug rather than as geography. One deterministic pass in cell
+order qualifies the later ones, so the map shows IRON SOUND and LOWER IRON SOUND.
+
 ## Colour and light
 
 Biome boundaries are now **truly blended**, not dithered. Each vertex classifies itself and
@@ -281,23 +340,32 @@ their failure states, four complications, the contract board, payment, the day r
 the yard with upgrades and hiring, saving, the first-run briefing, sound, the winch, and the
 telemetry that shows all of it.
 
+Also wired: eight steps of zoom to eight times the default view, the coarse region mesh that
+fills the far field, and the hillshaded region map with its grid, scale bar and
+collision-avoiding labels.
+
 Not yet: no interiors or ground-level detail (the camera never gets close enough to need
 them), no weather beyond the one complication, no day/night cycle, and no persistent
 consequences for a faction beyond its standing number — a faction you have ruined does not
-yet visibly lose ground on the map.
+yet visibly lose ground on the map. The region map does not pan or zoom; it does not need to
+at this scale, but a larger region would want it.
 
 ## Verification
 
-- **122 module checks** across seven suites: the campaign parity harness, the campaign
+- **124 module checks** across seven suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
-  layer and its landmarks, and the newer four kinds with their complications.
-- **13 browser checks** (`npm run verify:world`) against the built single file: it boots and
-  renders, the briefing describes the generated region, real keyboard input flies the
-  aircraft, nine regions and nine landmarks exist and the readout changes as you cross them,
-  every landmark streams in without error, the map and yard open on real keys, all twelve
-  kinds reach the board, a real key press pays the winch cable out, a contract can be flown
-  for money, progress saves and survives a reload, weather closes in and lifts, a
-  ten-kilometre transit stays bounded, and there are no external requests or script errors.
+  layer with its landmarks and place names, and the newer four kinds with their complications.
+- **17 browser checks** (`npm run verify:world`) against the built single file served at the
+  site root: it boots and renders, the briefing describes the generated region, real keyboard
+  input flies the aircraft, the camera stays above the ground everywhere including the highest
+  ground the sweep can find, nine regions and nine landmarks exist and the readout changes as
+  you cross them, every landmark streams in without error, the zoom ladder reaches exactly
+  eight times the default with the far field filling it, the coarse mesh stays under the
+  streamed terrain, the map draws inside a frame budget and repaints without accumulating
+  markers, the map and yard open on real keys, all twelve kinds reach the board, a real key
+  press pays the winch cable out, a contract can be flown for money, progress saves and
+  survives a reload, weather closes in and lifts, a ten-kilometre transit stays bounded, and
+  there are no external requests or script errors.
 
 The BLOCKHAWK campaign is untouched: it still builds to the byte (`dist/blockhawk.html`
 hashes to the value pinned in `QA.md`) and its 19 browser checks still pass. See `README.md`.

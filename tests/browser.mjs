@@ -14,7 +14,7 @@ const state=page=>page.evaluate(()=>window.blockhawk.getState());
 try {
   const desktop=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1});
   const page=await desktop.newPage();listen(page);
-  await page.goto(base+'/?test');await page.waitForFunction(()=>window.blockhawk?.getPerformance().ready);
+  await page.goto(base+'/blockhawk.html?test');await page.waitForFunction(()=>window.blockhawk?.getPerformance().ready);
   assert.equal(await page.title(),'BLOCKHAWK · Signal Storm');assert.equal((await state(page)).phase,'briefing');
   await page.screenshot({path:'artifacts/desktop-briefing.png'});record('Desktop loads the embedded 3D scene and briefing');
   await page.getByRole('button',{name:'Field manual',exact:true}).click();assert.equal(await page.locator('#manual').isVisible(),true);
@@ -85,7 +85,7 @@ try {
   evidence.desktop.performance=await page.evaluate(()=>window.blockhawk.getPerformance());await page.keyboard.press('Escape');
 
   const mobile=await browser.newContext({viewport:{width:915,height:412},deviceScaleFactor:2.5,isMobile:true,hasTouch:true,userAgent:'Mozilla/5.0 (Linux; Android 16; SM-S942B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Mobile Safari/537.36'});
-  const phone=await mobile.newPage();listen(phone);await phone.goto(base+'/?test');await phone.waitForFunction(()=>window.blockhawk?.getPerformance().ready);
+  const phone=await mobile.newPage();listen(phone);await phone.goto(base+'/blockhawk.html?test');await phone.waitForFunction(()=>window.blockhawk?.getPerformance().ready);
   await phone.screenshot({path:'artifacts/mobile-landscape-briefing.png'});await phone.locator('#deploy-button').tap();
   assert.equal(await phone.locator('#touch-controls').isVisible(),true);
   const joystick=await phone.locator('#joystick').boundingBox(),fire=await phone.locator('#touch-fire').boundingBox();
