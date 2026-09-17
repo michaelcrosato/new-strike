@@ -14,7 +14,12 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { createWorld, WORLD, BIOMES, FACTIONS } from './worldgen.js';
 import { ChunkStreamer, desiredChunks } from './streaming.js';
 import { buildChunk, createMaterials } from './terrain.js';
-import { createProfile, generateContracts, accept, resolve, endDay, standingBand, situation, contractKind } from './agency.js';
+import { createProfile, generateContracts, accept, resolve, endDay, standingBand, situation,
+  purchase, hire, UPGRADES, HIREABLE, applyStanding } from './agency.js';
+import { createCombat, rearm, syncHostiles, stepCombat, availableWeapons, combatStandingDeltas,
+  WEAPONS, hitCraft } from './combat.js';
+import { startMission, stepMission, missionStatus, clearMission } from './missions.js';
+import { EntityView, TracerView } from './entities.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -27,7 +32,7 @@ const home = world.home;
 const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: false, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.AgXToneMapping;
-renderer.toneMappingExposure = 1.06;
+renderer.toneMappingExposure = 0.98;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft was removed in three r186
 renderer.shadowMap.autoUpdate = false;          // driven once per frame, not once per pass
@@ -43,8 +48,8 @@ const camera = new THREE.OrthographicCamera(-75, 75, 45, -45, 0.5, 900);
 const cameraOffset = new THREE.Vector3(112, 142, 138);
 const cameraFocus = new THREE.Vector3(home.x, 0, home.z);
 
-scene.add(new THREE.HemisphereLight(0xc7dfd8, 0x54604a, 1.55));
-const sun = new THREE.DirectionalLight(0xffe2ae, 3.1);
+scene.add(new THREE.HemisphereLight(0xb9d2cc, 0x54604a, 1.25));
+const sun = new THREE.DirectionalLight(0xffe2ae, 2.6);
 sun.position.set(-90, 150, 80);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -135,10 +140,92 @@ const streamer = new ChunkStreamer({
   budget: 2,
 });
 
+// ---------------------------------------------------------------- the yard
+function renderYard() {
+  $('yard-cash').textContent = profile.cash.toLocaleString() + ' ON HAND';
+  $('yard-quill').textContent = situation(profile);
+  const list = (node, kind) => {
+    node.innerHTML = UPGRADES.filter(u => u.kind === kind).map(spec => {
+      const store = kind === 'base' ? profile.base : profile.heli;
+      const level = store[spec.id] ?? 0;
+      const maxed = level >= spec.max;
+      const cost = maxed ? null : spec.cost[level];
+      const can = !maxed && profile.cash >= cost;
+      return `<li class="${can ? 'can' : ''}" data-upgrade="${spec.id}">
+        <b>${spec.name} · ${level}/${spec.max}</b>${spec.describe(level)}
+        <span>${maxed ? 'FITTED' : 'UPGRADE'}<em>${maxed ? '—' : cost.toLocaleString()}</em></span></li>`;
+    }).join('');
+    for (const item of node.children) {
+      if (!item.classList.contains('can')) continue;
+      item.addEventListener('click', () => {
+        const result = purchase(profile, item.dataset.upgrade);
+        flash(result.ok ? 'FITTED' : result.reason);
+        if (result.ok) { rearm(combat, profile); renderWeapons(); saveProfile(); }
+        renderYard(); renderOutfit();
+      });
+    }
+  };
+  list($('yard-base'), 'base');
+  list($('yard-heli'), 'heli');
+  const crewNode = $('yard-crew');
+  crewNode.innerHTML = [
+    ...profile.crew.map(c => `<li><b>${c.short} · ${c.role}</b>${c.blurb}<span>ON THE BOOKS<em>${c.wage ? c.wage + '/DAY' : 'NO WAGE'}</em></span></li>`),
+    ...HIREABLE.filter(c => !profile.crew.some(x => x.id === c.id)).map(c => {
+      const ready = Object.entries(c.requires ?? {}).every(([k, n]) => (profile.base[k] ?? 0) >= n);
+      const can = ready && profile.cash >= c.cost;
+      return `<li class="${can ? 'can' : ''}" data-hire="${c.id}"><b>${c.short} · ${c.role}</b>${c.blurb}
+        <span>${ready ? 'HIRE' : 'NEEDS ' + Object.keys(c.requires).join(' ').toUpperCase()}<em>${c.cost.toLocaleString()}</em></span></li>`;
+    }),
+  ].join('');
+  for (const item of crewNode.children) {
+    if (!item.classList.contains('can')) continue;
+    item.addEventListener('click', () => {
+      const result = hire(profile, item.dataset.hire);
+      flash(result.ok ? 'HIRED' : result.reason);
+      if (result.ok) saveProfile();
+      renderYard(); renderOutfit(); refreshBoard();
+    });
+  }
+}
+function toggleYard() {
+  const panel = $('yard');
+  panel.hidden = !panel.hidden;
+  if (!panel.hidden) renderYard();
+}
+$('yard-close').addEventListener('click', toggleYard);
+
+function renderWeapons() {
+  const list = availableWeapons(profile.heli);
+  $('weapons').innerHTML = list.map((w, i) =>
+    `<div class="${i === combat.weapon ? 'on' : ''}">${w.short}<u>${Math.floor(combat.ammo[w.id] ?? 0)}</u></div>`).join('');
+}
+
 // ---------------------------------------------------------------- the outfit
 // The whole loop in miniature: work comes off the board, you fly it, and the region's
 // opinion of you moves. Everything here reads from the same generated world.
-const profile = createProfile({ seed });
+const SAVE_KEY = 'merc.profile.' + seed;
+function loadProfile() {
+  const fresh = createProfile({ seed });
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return fresh;
+    const saved = JSON.parse(raw);
+    // Merge rather than replace, so a save from an older build still boots.
+    return { ...fresh, ...saved,
+      standing: { ...fresh.standing, ...saved.standing },
+      base: { ...fresh.base, ...saved.base },
+      heli: { ...fresh.heli, ...saved.heli },
+      crew: saved.crew?.length ? saved.crew : fresh.crew,
+      active: null };
+  } catch { return fresh; }
+}
+function saveProfile() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(profile)); } catch {}
+}
+const profile = loadProfile();
+const combat = createCombat(profile);
+rearm(combat, profile);
+let mission = null;
 let board = [];
 const ARRIVE = 46;           // how close counts as being over the site
 
@@ -185,35 +272,70 @@ function takeContract(contract) {
   if (!contract) return;
   const result = accept(profile, contract);
   if (!result.ok) { flash(result.reason); return; }
-  profile.active.reached = false;
+  mission = startMission(world, profile, profile.active, combat);
   $('active').hidden = false;
   $('active-title').textContent = contract.title;
+  $('mission').hidden = false;
   flash(`${contract.kindName} ACCEPTED · ${contract.site.name}`);
   renderBoard();
 }
 
-function updateActive() {
-  const job = profile.active;
-  if (!job) { $('active').hidden = true; return; }
-  const toSite = Math.hypot(job.site.x - craft.x, job.site.z - craft.z);
-  const toHome = Math.hypot(home.x - craft.x, home.z - craft.z);
-  if (!job.reached && toSite < ARRIVE) {
-    job.reached = true;
-    flash(`ON SITE · ${job.site.name} · BRING IT HOME`);
+function settleContract(success, reason) {
+  const contract = profile.active;
+  const outcome = resolve(profile, { success });
+  clearMission(mission, combat);
+  mission = null;
+  $('active').hidden = true;
+  $('mission').hidden = true;
+  if (success) {
+    flash(`PAID ${outcome.paid.toLocaleString()} · ` +
+      Object.entries(outcome.standing).map(([k, v]) => k.toUpperCase() + (v > 0 ? ' +' : ' ') + v).join('  '));
+  } else {
+    flash(`${reason ?? 'CONTRACT FAILED'} · ${outcome.paid.toLocaleString()}`);
   }
-  if (job.reached && toHome < ARRIVE) {
-    const outcome = resolve(profile, { success: true });
-    flash(`PAID ${outcome.paid.toLocaleString()} · ${Object.entries(outcome.standing).map(([k, v]) => k.toUpperCase() + (v > 0 ? ' +' : ' ') + v).join('  ')}`);
-    endDay(profile);
-    refreshBoard();
-    renderOutfit();
-    $('active').hidden = true;
-    return;
-  }
-  const target = job.reached ? toHome : toSite;
-  $('active-range').textContent = `${Math.round(target * WORLD.metresPerUnit)} m`;
-  $('active-state').textContent = job.reached ? 'RETURN TO THE YARD' : `INBOUND · ${job.site.kindName}`;
+  endDay(profile);
+  rearm(combat, profile);
+  refreshBoard();
+  renderOutfit();
+  renderWeapons();
+  saveProfile();
 }
+
+function updateActive(dt) {
+  if (!mission) { $('mission').hidden = true; return; }
+  stepMission(mission, { world, craft, combat, input: { interact: keys.has('KeyE') } }, dt);
+  for (const event of mission.events) {
+    if (event.type === 'aboard') flash(event.remaining ? `ABOARD · ${event.remaining} TO GO` : 'ALL ABOARD');
+    if (event.type === 'scanned') flash('SCAN COMPLETE');
+    if (event.type === 'dropped') flash('CARGO DOWN');
+    if (event.type === 'waypoint') flash(event.left ? `WAYPOINT · ${event.left} LEFT` : 'SWEEP COMPLETE');
+    if (event.type === 'convoyArrived') flash('COLUMN IS IN');
+    if (event.type === 'convoyLost') flash('COLUMN LOST');
+  }
+  const status = missionStatus(mission, craft);
+  $('mission-label').textContent = status.label;
+  $('mission-bar').style.width = Math.round(status.progress * 100) + '%';
+  $('mission-range').textContent = status.marker
+    ? `${Math.round(status.range * WORLD.metresPerUnit)} m` + (status.holding ? ' · HOLDING' : '')
+    : '';
+  if (mission.done) settleContract(true);
+  else if (mission.failed) settleContract(false, mission.title);
+}
+
+// Losing the airframe costs the job and a chunk of cash, and puts you back in the yard.
+function loseAircraft() {
+  const hadJob = !!profile.active;
+  if (hadJob) settleContract(false, 'AIRCRAFT LOST');
+  else { profile.cash = Math.max(0, profile.cash - 1200); endDay(profile); renderOutfit(); saveProfile(); }
+  flash('AIRCRAFT LOST · REBUILT OVERNIGHT');
+  rearm(combat, profile);
+  combat.provoked = false;
+  teleportHome();
+}
+
+let mouseFire = false;
+addEventListener('pointerdown', e => { if (e.button === 0 && $('yard').hidden && $('map-panel').hidden) mouseFire = true; });
+addEventListener('pointerup', () => { mouseFire = false; });
 
 let flashUntil = 0;
 function flash(text) {
@@ -222,6 +344,9 @@ function flash(text) {
   node.hidden = false;
   flashUntil = performance.now() + 4200;
 }
+
+const entityView = new EntityView(scene, materials.built);
+const tracers = new TracerView(scene);
 
 // ---------------------------------------------------------------- flight
 const craft = {
@@ -238,7 +363,12 @@ addEventListener('keydown', e => {
   keys.add(e.code);
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyH') teleportHome();
-  if (e.code === 'KeyG') $('debug').classList.toggle('hidden');
+  if (e.code === 'KeyG') { $('debug').classList.toggle('hidden'); $('outfit').classList.toggle('hidden'); $('hud').classList.toggle('hidden'); }
+  if (e.code === 'KeyB') toggleYard();
+  if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') {
+    const index = Number(e.code.slice(-1)) - 1;
+    if (index < availableWeapons(profile.heli).length) { combat.weapon = index; renderWeapons(); }
+  }
 });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
@@ -279,6 +409,19 @@ function flight(dt) {
   const side = craft.vx * Math.cos(craft.yaw) + craft.vz * Math.sin(craft.yaw);
   heli.body.rotation.x = THREE.MathUtils.damp(heli.body.rotation.x, -forward * 0.006, 6, dt);
   heli.body.rotation.z = THREE.MathUtils.damp(heli.body.rotation.z, -side * 0.009, 6, dt);
+
+  // Fuel burns while flying and tops up over your own pad.
+  const home = world.home;
+  const overYard = Math.hypot(craft.x - home.x, craft.z - home.z) < 40;
+  if (overYard && Math.hypot(craft.vx, craft.vz) < 10) {
+    combat.fuel = Math.min(combat.maxFuel, combat.fuel + 26 * dt * (1 + profile.base.fuel));
+    combat.armour = Math.min(combat.maxArmour, combat.armour + 14 * dt * (1 + profile.base.workshop));
+    for (const w of availableWeapons(profile.heli)) combat.ammo[w.id] = Math.min(w.max, (combat.ammo[w.id] ?? 0) + w.max / 6 * dt);
+  } else {
+    combat.fuel = Math.max(0, combat.fuel - dt * (boost ? 0.55 : 0.34));
+    if (combat.fuel <= 0) loseAircraft();
+  }
+  combat.invulnerable = Math.max(0, (combat.invulnerable ?? 0) - dt);
 }
 
 function updateCamera(dt, snap = false) {
@@ -402,6 +545,21 @@ function frame(now) {
   if (fpsAccum > 0.4) { fps = frames / fpsAccum; frames = 0; fpsAccum = 0; }
 
   flight(dt);
+  syncHostiles(combat, world, profile, [...streamer.resident.keys()]);
+  const events = stepCombat(combat, world, profile, craft,
+    { fire: keys.has('Space') || mouseFire, flare: keys.has('KeyF') }, dt);
+  for (const event of events) {
+    if (event.type === 'destroyed') {
+      profile.cash += Math.round(event.score / 4);
+      flash(`${event.unit.toUpperCase()} DESTROYED · +${Math.round(event.score / 4)}`);
+    }
+    if (event.type === 'downed') loseAircraft();
+  }
+  const deltas = combatStandingDeltas(events);
+  if (Object.keys(deltas).length) { applyStanding(profile, deltas); renderOutfit(); }
+  entityView.sync([...combat.hostiles, ...(mission?.entities ?? []),
+    ...(mission?.convoy ? [mission.convoy] : [])]);
+  tracers.sync(combat.projectiles);
   const t0 = performance.now();
   const streamed = streamer.update(craft.x, craft.z);
   buildHitch = buildHitch * 0.8 + (performance.now() - t0) * 0.2;
@@ -414,7 +572,7 @@ function frame(now) {
   renderer.info.reset();
   composer.render();
 
-  updateActive();
+  updateActive(dt);
   if ($('flash') && !$('flash').hidden && performance.now() > flashUntil) $('flash').hidden = true;
   if (Math.floor(clock * 4) % 2 === 0) updateReadout(streamed);
   markCraft();
@@ -438,6 +596,13 @@ function updateReadout(streamed) {
   $('geometry').textContent = `${residentMeshes} meshes · ${Math.round(residentTriangles / 1000)}k triangles held`;
   $('draw').textContent = `${renderer.info.render.calls} calls · ${Math.round(renderer.info.render.triangles / 1000)}k drawn`;
   $('fps').textContent = `${Math.round(fps)} fps · stream ${buildHitch.toFixed(1)} ms/frame`;
+  $('armour').textContent = Math.round(combat.armour);
+  $('armour-bar').style.width = Math.round(combat.armour / combat.maxArmour * 100) + '%';
+  $('armour-bar').style.background = combat.armour < combat.maxArmour * 0.3 ? '#ff8060' : '#b9d7b3';
+  $('fuel').textContent = Math.round(combat.fuel);
+  $('fuel-bar').style.width = Math.round(combat.fuel / combat.maxFuel * 100) + '%';
+  $('alert').hidden = combat.alert <= 0;
+  renderWeapons();
 }
 
 // ---------------------------------------------------------------- boot
@@ -449,6 +614,7 @@ try {
   composer.render();
   refreshBoard();
   renderOutfit();
+  renderWeapons();
   $('loading').hidden = true;
   requestAnimationFrame(frame);
 } catch (error) {
@@ -476,6 +642,25 @@ window.merc = {
     fps: Math.round(fps), streamMs: +buildHitch.toFixed(2),
     stats: { ...streamer.stats },
   }),
+  combat, mission: () => mission, profileRef: profile, saveProfile,
+  // Runs the real loop synchronously, for inspection without waiting on frames.
+  simulate: (seconds, input = {}) => {
+    const step = 1 / 60;
+    for (let i = 0; i < seconds * 60; i++) {
+      for (const key of Object.keys(input)) if (input[key]) keys.add(key); else keys.delete(key);
+      flight(step);
+      syncHostiles(combat, world, profile, [...streamer.resident.keys()]);
+      const evs = stepCombat(combat, world, profile, craft, { fire: keys.has("Space"), flare: keys.has("KeyF") }, step);
+      for (const e of evs) { if (e.type === "destroyed") profile.cash += Math.round(e.score / 4); if (e.type === "downed") loseAircraft(); }
+      const d = combatStandingDeltas(evs); if (Object.keys(d).length) applyStanding(profile, d);
+      updateActive(step);
+      streamer.update(craft.x, craft.z);
+    }
+    keys.clear();
+    return { armour: Math.round(combat.armour), fuel: Math.round(combat.fuel), kills: combat.kills,
+      hostiles: combat.hostiles.length, cash: profile.cash, mission: mission && { kind: mission.kind, stage: mission.stage, progress: +mission.progress.toFixed(2), done: mission.done, failed: mission.failed } };
+  },
+  yard: () => { toggleYard(); return true; },
   teleport: (x, z) => { craft.x = x; craft.z = z; craft.y = world.groundHeight(x, z) + 16; cameraFocus.set(x, 0, z); streamer.settle(x, z, 300); updateCamera(0, true); },
   render: () => { renderer.info.reset(); renderer.shadowMap.needsUpdate = true; composer.render(); },
   desired: () => desiredChunks(craft.x, craft.z).length,

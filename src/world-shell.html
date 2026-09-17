@@ -42,6 +42,41 @@
     #board li b{display:block;font-size:9px;letter-spacing:.8px;color:var(--paper);margin-bottom:3px}
     #board li small{display:flex;justify-content:space-between;font-size:7px;letter-spacing:1.1px;color:var(--muted)}
     #board li.taken{border-color:var(--amber);background:#3f4833cc}
+    #hud{position:fixed;left:26px;top:74px;z-index:10;width:250px;background:var(--panel);
+      border:1px solid var(--line);padding:14px 16px 12px}
+    .gauge{display:flex;align-items:center;gap:8px;font-size:8px;letter-spacing:1.2px;color:var(--muted);padding:2px 0}
+    .gauge span{width:46px}.gauge i{flex:1;height:4px;background:#b5c5aa22;display:block}
+    .gauge i b{display:block;height:100%;background:var(--amber)}
+    .gauge u{text-decoration:none;width:34px;text-align:right;color:var(--paper);font-size:8px}
+    #weapons{display:flex;gap:4px;margin:10px 0 0}
+    #weapons div{flex:1;border:1px solid var(--line);padding:5px 4px;font-size:7px;letter-spacing:1px;
+      text-align:center;color:var(--muted)}
+    #weapons div.on{border-color:var(--amber);color:var(--paper);background:#3f483399}
+    #weapons div u{display:block;text-decoration:none;font-size:9px;color:var(--paper);margin-top:2px}
+    #mission{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+    #mission b{display:block;font-size:8px;letter-spacing:1.1px;color:var(--amber);margin-bottom:5px}
+    #mission i{display:block;height:3px;background:#b5c5aa22}#mission i b{height:100%;background:var(--amber);margin:0}
+    #mission small{display:block;font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:5px}
+    #alert{margin-top:10px;font-size:8px;letter-spacing:1.6px;color:#ff8060;animation:warn 1s infinite}
+    @keyframes warn{50%{opacity:.45}}
+    #yard{position:fixed;inset:0;z-index:22;display:flex;align-items:center;justify-content:center;
+      background:#0f2523e0;backdrop-filter:blur(8px)}
+    .yard-card{position:relative;width:900px;max-height:88vh;overflow:auto;padding:28px;
+      background:linear-gradient(150deg,#22392ff2,#162924f2);border:1px solid var(--line)}
+    .yard-card header{display:flex;justify-content:space-between;align-items:baseline;gap:30px}
+    .yard-card h2{font-family:"Barlow Condensed",Impact,sans-serif;font-size:40px;margin:0}
+    .yard-card small{font-size:9px;letter-spacing:2px;color:var(--amber)}
+    .yard-card p{font-size:11px;line-height:1.7;color:#b6c7ad;margin:10px 0 22px;max-width:620px}
+    .yard-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
+    .yard-grid h3{font-size:9px;letter-spacing:2px;color:var(--amber);margin:0 0 12px;
+      padding-top:12px;border-top:1px solid var(--line)}
+    .yard-grid ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+    .yard-grid li{border:1px solid var(--line);padding:8px 9px;font-size:8px;letter-spacing:1px;color:var(--muted)}
+    .yard-grid li.can{cursor:pointer}.yard-grid li.can:hover{border-color:var(--amber)}
+    .yard-grid li b{display:block;font-size:9px;color:var(--paper);letter-spacing:.8px;margin-bottom:3px}
+    .yard-grid li span{display:flex;justify-content:space-between;gap:10px;margin-top:4px}
+    .yard-grid li em{font-style:normal;color:var(--amber)}
+    .close{position:absolute;right:22px;top:16px;background:none;border:0;color:var(--paper);font-size:26px;cursor:pointer}
     .keys{position:fixed;right:26px;bottom:26px;z-index:10;text-align:right;font-size:8px;letter-spacing:1.4px;color:var(--muted);line-height:2}
     .keys kbd{border:1px solid var(--line);padding:2px 5px;margin-right:5px;color:var(--paper);font:inherit;border-radius:2px}
     #map-panel{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
@@ -105,11 +140,38 @@
     </div>
   </section>
 
+  <section id="hud">
+    <div class="gauge"><span>ARMOUR</span><i><b id="armour-bar"></b></i><u id="armour">—</u></div>
+    <div class="gauge"><span>FUEL</span><i><b id="fuel-bar"></b></i><u id="fuel">—</u></div>
+    <div id="weapons"></div>
+    <div id="mission" hidden>
+      <b id="mission-label">—</b>
+      <i><b id="mission-bar"></b></i>
+      <small id="mission-range">—</small>
+    </div>
+    <div id="alert" hidden>TAKING FIRE</div>
+  </section>
+
+  <section id="yard" hidden>
+    <div class="yard-card">
+      <button id="yard-close" class="close" aria-label="Close">×</button>
+      <header><h2>THE YARD.</h2><small id="yard-cash">—</small></header>
+      <p id="yard-quill">—</p>
+      <div class="yard-grid">
+        <div><h3>THE BASE</h3><ul id="yard-base"></ul></div>
+        <div><h3>THE AIRFRAME</h3><ul id="yard-heli"></ul></div>
+        <div><h3>THE CREW</h3><ul id="yard-crew"></ul></div>
+      </div>
+    </div>
+  </section>
+
   <div class="keys">
     <div><kbd>W A S D</kbd>fly</div>
     <div><kbd>SHIFT</kbd>run up the throttle</div>
     <div><kbd>SPACE</kbd>climb <kbd>C</kbd>descend</div>
-    <div><kbd>M</kbd>region map <kbd>H</kbd>home <kbd>G</kbd>hide panel</div>
+    <div><kbd>SPACE</kbd>fire <kbd>E</kbd>winch / scan <kbd>F</kbd>flares</div>
+    <div><kbd>1 2 3</kbd>weapons <kbd>B</kbd>the yard</div>
+    <div><kbd>M</kbd>region map <kbd>H</kbd>home <kbd>G</kbd>hide panels</div>
   </div>
 
   <section id="map-panel" hidden>

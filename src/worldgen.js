@@ -105,8 +105,8 @@ export const BIOMES = [
     ground: 0x51694f, groundAlt: 0x5c7457, cliff: 0x6e6f63, sand: 0x8e8b6f,
     scatter: 0.40, props: ['pine', 'rock'], colour: '#52684e' },
   { id: 7, key: 'alpine', name: 'ALPINE RIDGE',
-    ground: 0xb9c0bd, groundAlt: 0xcdd3cf, cliff: 0x77796f, sand: 0x9fa49b,
-    scatter: 0.08, props: ['pine', 'rock'], colour: '#b9c0bd' },
+    ground: 0x9ea79f, groundAlt: 0xb0b8ae, cliff: 0x6d6f66, sand: 0x8d9189,
+    scatter: 0.08, props: ['pine', 'rock'], colour: '#a3aca4' },
 ];
 export const biome = id => BIOMES[id];
 
@@ -126,7 +126,7 @@ export const BANDS = {
   wetMoisture: 0.72,
   lowlandHeight: 12,
   highlandHeight: 40,
-  alpineHeight: 56,
+  alpineHeight: 68,
   coldTemperature: 0.34,
   aridMoisture: 0.46,
   humidMoisture: 0.6,

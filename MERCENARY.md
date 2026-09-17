@@ -4,16 +4,16 @@ An open-world successor to the BLOCKHAWK campaign. You start in a makeshift yard
 bottom-of-the-barrel helicopter and one colleague, and you fly whatever pays. The region is
 a hotspot; the work you take decides who talks to you and who shoots at you.
 
-This document covers what exists now, which is the backend: the world, the streamer, and the
-outfit that turns the world into work.
+This document covers what exists now: the world, the streamer, the outfit that turns the world
+into work, the combat that makes the region dangerous, and the eight kinds of job you fly.
 
 ```powershell
 npm run world      # builds dist/world.html and serves it
-npm test           # 63 checks, including the world and outfit suites
+npm test           # 84 checks across five suites
 ```
 
-Open **http://localhost:4189/dist/world.html**. `W A S D` fly, `SHIFT` throttle, `SPACE` /
-`C` climb and descend, `M` region map, `H` back to the yard, `G` hide the telemetry.
+Open **http://localhost:4189/dist/world.html**. `W A S D` fly, `SHIFT` throttle, `SPACE` fire, `E` winch or scan, `F` flares, `1 2 3` weapons,
+`B` the yard, `M` region map, `H` back to the yard, `G` hide the panels.
 `?seed=12345` generates a different region.
 
 ## Scale
@@ -45,10 +45,10 @@ measured sweep of the region rather than guessed. Current coverage, with 66% lan
 
 | biome | share | biome | share |
 | --- | --- | --- | --- |
-| open water | 34.3% | badlands | 8.2% |
-| shoreline | 3.6% | pine highland | 15.0% |
-| delta wetland | 8.8% | alpine ridge | 5.2% |
-| highland jungle | 10.2% | savanna | 14.6% |
+| open water | 32.4% | badlands | 8.2% |
+| shoreline | 4.7% | pine highland | 16.8% |
+| delta wetland | 9.5% | alpine ridge | 3.6% |
+| highland jungle | 10.3% | savanna | 14.6% |
 
 On top of the fields: **five factions** holding noise-warped territory around deterministic
 seats, **51 settlements** (about one per 2 km²) placed per cell where the ground allows and
@@ -102,15 +102,63 @@ the contracts that come out of all of it.
 You begin with **Margit Quill**, radio and base manager, who has no interest in your feelings
 about any of it and always has a line about the state of the outfit.
 
+## Combat — `src/combat.js`
+
+Garrisons are generated per chunk from the same seed as the terrain: checkpoints, technicals,
+anti-air, patrol boats, radar masts and fuel depots, placed on the surface they belong on and
+weighted by the threat of whatever settlement is nearby. They stream in with the chunks, are
+simulated only while you are near them, and are remembered once destroyed, so a garrison you
+flattened stays flat across a whole campaign.
+
+**Standing decides who shoots.** A faction that tolerates you leaves a rotor overhead alone;
+below −12 they engage if you linger; below −45 they fire on sight. Pulling the trigger on
+anyone provokes the neighbourhood for the rest of the sortie. Destroying a faction's hardware
+costs you standing with them immediately, which is the fastest way to make an enemy — and the
+whole point of the region.
+
+The airframe carries what is fitted: the opening machine has a door gun and nothing else,
+and rockets and seekers arrive with pylons. Armour and fuel scale with plate and tanks. Fuel
+burns while you fly and tops up over your own pad, along with armour and ammunition, at a
+rate set by your bowser and workshop. Run dry or lose the armour and the aircraft is lost:
+the job fails, it costs you, and you wake up in the yard with it rebuilt.
+
+## Missions — `src/missions.js`
+
+All eight contract kinds are flyable, and each can fail:
+
+| kind | what you do | how it goes wrong |
+| --- | --- | --- |
+| survey | hold a steady scan over the site | leaving or racing through resets it |
+| delivery | set a crate down on site, then come home | — |
+| extraction | winch three survivors, fly them back | — |
+| salvage | winch a wreck out of open ground | — |
+| patrol | fly four waypoints around the site | — |
+| escort | keep a slow column alive to its destination | an uncovered column burns |
+| strike | flatten the garrison at the site | — |
+| interdiction | stop a vehicle before it reaches the border | it gets away |
+
+Strike and interdiction push their targets straight into the combat hostile list, so there is
+one damage model rather than two, and mission targets are cleaned out when the job ends.
+
+## The yard
+
+Press `B`. Nine fittings across the base and the airframe, each with its level, its
+description and its price; four hireable crew gated behind the facilities they need. Buying a
+fitting rearms the aircraft on the spot. Progress saves to local storage per seed, and a save
+from an older build still boots because it is merged over a fresh profile rather than replacing it.
+
 ## What is wired and what is not
 
-Wired: the region, the streamer, chunk meshing, flight over streamed terrain, the region map,
-the contract board, accepting a job, flying to the site and home again, payment, standing
-movement, the day rolling over, and the telemetry that shows all of it.
+Wired: the region, the streamer, chunk meshing, flight, the region map, combat with streamed
+garrisons, standing-driven hostility, all eight contract kinds with their failure states, the
+contract board, payment, the day rolling over, the yard with upgrades and hiring, saving, and
+the telemetry that shows all of it.
 
-Not yet: combat in the open world (weapons, threats and the enemies that make a strike
-contract mean something), the per-kind objective logic from the campaign engine ported onto
-contracts, the base and crew screens, saving, and biome-boundary blending — adjacent biomes
-currently meet on a hard classifier edge.
+Not yet: a proper first-run introduction, sound, the campaign's rescue-winch animation on the
+open-world airframe, and mission variety beyond the eight kinds. Biome boundaries are now
+dithered per vertex rather than drawn as a hard line, but they are interleaved rather than
+truly blended.
 
 The BLOCKHAWK campaign is untouched and still builds, tests and deploys; see `README.md`.
+
+The BLOCKHAWK campaign is untouched and still builds, tests and deploys; see README.md.

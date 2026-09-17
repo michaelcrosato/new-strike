@@ -15,6 +15,13 @@ const SKIRT = 10;                               // hides the seam between detail
 const tmpA = new THREE.Color(), tmpB = new THREE.Color();
 // Primitives disagree about indexing (octahedra come out non-indexed, boxes indexed) and
 // mergeGeometries refuses a mixture, so every piece is flattened before merging.
+// A cheap per-vertex jitter. Biomes are classified on hard thresholds, so without this the
+// boundary between, say, badlands and savanna is a drawn line across the ground. Nudging
+// the inputs per vertex interleaves the two for a few metres instead.
+const dither = (x, z) => {
+  const n = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+  return (n - Math.floor(n)) - 0.5;
+};
 const flatten = geo => { if (!geo.index) return geo; const out = geo.toNonIndexed(); geo.dispose(); return out; };
 const mergeAll = list => { const parts = list.filter(Boolean).map(flatten); return parts.length ? mergeGeometries(parts) : null; };
 // Two scratch colours: callers routinely need a base and a blend target at once, and a
@@ -50,7 +57,9 @@ function groundGeometry(world, cx, cz, lod, sites) {
       positions[i * 3] = x;
       positions[i * 3 + 1] = Math.max(h, -9);
       positions[i * 3 + 2] = z;
-      const info = BIOMES[world.classify(h, world.moisture(x, z), world.temperature(x, z))];
+      const blur = dither(x, z);
+      const info = BIOMES[world.classify(h + blur * 2.2, world.moisture(x, z) + blur * 0.055,
+        world.temperature(x, z) + dither(z, x) * 0.05)];
       // Steep ground shows rock; the flat tops keep their biome colour, with a little
       // large-scale variation so a plain does not read as one flat sheet.
       const steep = Math.min(1, world.slope(x, z, step) * 2.1);

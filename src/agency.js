@@ -179,7 +179,8 @@ export function generateContracts(world, profile, { day = profile.day, count = n
 
     out.push({
       id, kind: kind.key, kindName: kind.name, issuer: issuer.key, issuerName: issuer.name,
-      site: { id: site.id, name: site.name, x: site.x, z: site.z, kind: site.kind, kindName: site.kindName, faction: site.faction },
+      site: { id: site.id, name: site.name, x: site.x, z: site.z, kind: site.kind, kindName: site.kindName,
+        faction: site.faction, radius: site.radius, threat: site.threat, height: site.height },
       targetFaction: targetFaction.key,
       hostile: kind.hostileTarget,
       distance, distanceKm: +distanceKm.toFixed(2), risk, pay,
