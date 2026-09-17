@@ -96,6 +96,32 @@
     #loading small{font-size:8px;letter-spacing:2px;color:var(--muted)}
     .load-line{width:200px;height:2px;background:linear-gradient(90deg,transparent,var(--amber),transparent);animation:load 1s infinite}
     @keyframes load{50%{opacity:.3;transform:scaleX(.5)}}
+    #board li small+small{margin-top:3px}
+    .where{color:#8fa78d;font-size:7px;letter-spacing:1.2px}
+    .twist{color:var(--amber)!important;font-size:7px;letter-spacing:1.3px}
+    #intro{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;
+      background:#0d1f1de8;backdrop-filter:blur(9px);padding:24px}
+    .intro-card{width:860px;max-height:92vh;overflow:auto;padding:30px 34px 26px;
+      background:linear-gradient(150deg,#22392ff5,#14262299);border:1px solid var(--line)}
+    .intro-card header{display:flex;justify-content:space-between;align-items:baseline;gap:24px;
+      border-bottom:1px solid var(--line);padding-bottom:12px}
+    .intro-card h2{font-family:"Barlow Condensed",Impact,sans-serif;font-size:44px;margin:0;letter-spacing:-.5px}
+    .intro-card header small{font-size:9px;letter-spacing:2px;color:var(--amber);text-align:right}
+    .intro-card h3{font-size:9px;letter-spacing:2px;color:var(--amber);margin:18px 0 8px}
+    .intro-card p{font-size:11px;line-height:1.75;color:#b6c7ad;margin:0 0 9px}
+    .voice{display:flex;gap:16px;margin:16px 0 4px!important;padding:14px 16px;border-left:2px solid var(--amber);background:#1b332c66}
+    .voice b{flex:0 0 96px;font-size:8px;letter-spacing:1.6px;color:var(--paper);padding-top:2px}
+    .voice span{font-size:12px;line-height:1.8;color:#d8e0cc}
+    .intro-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:32px;margin-top:6px}
+    .intro-grid ul{list-style:none;margin:8px 0 0;padding:0;
+      display:grid;grid-template-columns:1fr 1fr;gap:3px 12px}
+    .intro-grid li{font-size:8px;letter-spacing:1px;color:var(--muted);display:flex;gap:6px;align-items:baseline}
+    .intro-grid li i{width:7px;height:7px;flex:0 0 7px;display:block}
+    .intro-card kbd{border:1px solid var(--line);padding:1px 5px;color:var(--paper);font:inherit;
+      font-size:9px;border-radius:2px;margin-right:2px}
+    #intro-go{margin-top:22px;width:100%;padding:13px;background:#3f4833;color:var(--paper);
+      border:1px solid var(--amber);font:inherit;font-size:10px;letter-spacing:2.6px;cursor:pointer}
+    #intro-go:hover{background:#4d5840}
   </style>
 </head>
 <body>
@@ -113,6 +139,7 @@
     <div class="row"><span>ALTITUDE</span><b id="alt">—</b></div>
     <div class="row"><span>GROUND SPEED</span><b id="speed">—</b></div>
     <hr>
+    <div class="row"><span>REGION</span><b id="region">—</b></div>
     <div class="row"><span>BIOME</span><b id="biome">—</b></div>
     <div class="row"><span>TERRITORY</span><b id="territory">—</b></div>
     <div class="row wide"><span>NEAREST</span><b id="nearest">—</b></div>
@@ -148,6 +175,7 @@
       <b id="mission-label">—</b>
       <i><b id="mission-bar"></b></i>
       <small id="mission-range">—</small>
+      <small id="mission-twist" class="twist" hidden>—</small>
     </div>
     <div id="alert" hidden>TAKING FIRE</div>
   </section>
@@ -179,7 +207,7 @@
       <button id="map-close" aria-label="Close map">×</button>
       <header>
         <h2>THE REGION.</h2>
-        <small>10 × 10 KM · 8 BIOMES · 5 FACTIONS · GENERATED FROM SEED</small>
+        <small>10 × 10 KM · 9 REGIONS · 8 BIOMES · 5 FACTIONS · GENERATED FROM SEED</small>
       </header>
       <canvas id="map" width="620" height="620" aria-label="Region map"></canvas>
       <div class="legend">
@@ -189,7 +217,38 @@
         <span><i style="background:#e3cf7a"></i>MERIDIAN</span>
         <span><i style="background:#c79ad8"></i>SALT ROAD</span>
         <span><i style="background:#f3b25e"></i>YOUR YARD</span>
+        <span><i style="background:#f4edc9;transform:rotate(45deg)"></i>LANDMARK</span>
       </div>
+    </div>
+  </section>
+
+  <section id="intro" hidden>
+    <div class="intro-card">
+      <header>
+        <h2>THE YARD.</h2>
+        <small id="intro-where">—</small>
+      </header>
+      <p class="voice"><b>MARGIT QUILL</b><span id="intro-quill">—</span></p>
+      <div class="intro-grid">
+        <div>
+          <h3>THE REGION</h3>
+          <p id="intro-region">—</p>
+          <ul id="intro-areas"></ul>
+        </div>
+        <div>
+          <h3>THE AIRCRAFT</h3>
+          <p><kbd>W A S D</kbd> fly · <kbd>SHIFT</kbd> throttle · <kbd>SPACE</kbd> climb · <kbd>C</kbd> descend</p>
+          <p><kbd>SPACE</kbd> fire · <kbd>E</kbd> winch, scan or mark · <kbd>F</kbd> flares · <kbd>1 2 3</kbd> weapons</p>
+          <p><kbd>B</kbd> the yard · <kbd>M</kbd> the map · <kbd>H</kbd> back to the pad · <kbd>G</kbd> hide the panels</p>
+          <h3>THE WORK</h3>
+          <p>Jobs are on the board, top right. Take one and it tells you where to go and
+            what to do when you get there. Fuel and armour come back over your own pad and
+            nowhere else.</p>
+          <p>Every job moves somebody's opinion of you. You will not stay neutral, and you
+            are not supposed to.</p>
+        </div>
+      </div>
+      <button id="intro-go">TAKE THE FIRST JOB</button>
     </div>
   </section>
 

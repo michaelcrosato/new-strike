@@ -13,15 +13,36 @@ export const PROP_BUDGET = [26, 9, 0];
 const SKIRT = 10;                               // hides the seam between detail levels
 
 const tmpA = new THREE.Color(), tmpB = new THREE.Color();
+
+// Every biome's three ground colours, converted to linear once at load. Blending happens
+// per vertex and a THREE.Color conversion is three pow() calls, so doing it here instead
+// of in the loop is what makes a real blend cheaper than the single hard lookup it
+// replaces. Layout per biome: ground, groundAlt, cliff.
+const PALETTE = new Float32Array(BIOMES.length * 9);
+BIOMES.forEach(info => {
+  [info.ground, info.groundAlt, info.cliff].forEach((hex, slot) => {
+    tmpA.setHex(hex);
+    const at = info.id * 9 + slot * 3;
+    PALETTE[at] = tmpA.r; PALETTE[at + 1] = tmpA.g; PALETTE[at + 2] = tmpA.b;
+  });
+});
+
+// How far to look either side of a vertex's own classification, in the classifier's own
+// units. Inside a biome all five probes agree and the colour is exact; within this much of
+// a threshold they disagree and the colour is the mixture, which is what turns the hard
+// bands into a gradient over roughly fifteen metres of ground.
+const BLEND_H = 2.8, BLEND_M = 0.055, BLEND_T = 0.045;
+const PROBES = [
+  [0, 0, 0, 2],                                 // the vertex itself, weighted double
+  [BLEND_H, 0, BLEND_T, 1],
+  [-BLEND_H, 0, -BLEND_T, 1],
+  [0, BLEND_M, -BLEND_T, 1],
+  [0, -BLEND_M, BLEND_T, 1],
+];
+const PROBE_WEIGHT = PROBES.reduce((total, p) => total + p[3], 0);
+
 // Primitives disagree about indexing (octahedra come out non-indexed, boxes indexed) and
 // mergeGeometries refuses a mixture, so every piece is flattened before merging.
-// A cheap per-vertex jitter. Biomes are classified on hard thresholds, so without this the
-// boundary between, say, badlands and savanna is a drawn line across the ground. Nudging
-// the inputs per vertex interleaves the two for a few metres instead.
-const dither = (x, z) => {
-  const n = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
-  return (n - Math.floor(n)) - 0.5;
-};
 const flatten = geo => { if (!geo.index) return geo; const out = geo.toNonIndexed(); geo.dispose(); return out; };
 const mergeAll = list => { const parts = list.filter(Boolean).map(flatten); return parts.length ? mergeGeometries(parts) : null; };
 // Two scratch colours: callers routinely need a base and a blend target at once, and a
@@ -47,28 +68,65 @@ function groundGeometry(world, cx, cz, lod, sites) {
   const positions = new Float32Array(side * side * 3);
   const colours = new Float32Array(side * side * 3);
   const heights = new Float32Array(side * side);
+  const raws = new Float32Array(side * side);
+  const wet = new Float32Array(side * side);
+  const warm = new Float32Array(side * side);
 
+  // First pass: the surface. One elevation sample per vertex, and the two derived fields
+  // are handed the height they would otherwise recompute for themselves.
   for (let iz = 0; iz < side; iz++) {
     for (let ix = 0; ix < side; ix++) {
       const x = originX + ix * step, z = originZ + iz * step;
-      const h = world.groundHeight(x, z, sites);
+      const raw = world.elevation(x, z);
+      const h = world.groundHeight(x, z, sites, raw);
       const i = iz * side + ix;
+      raws[i] = raw;
       heights[i] = h;
+      wet[i] = world.moisture(x, z, raw);
+      warm[i] = world.temperature(x, z, raw);
       positions[i * 3] = x;
       positions[i * 3 + 1] = Math.max(h, -9);
       positions[i * 3 + 2] = z;
-      const blur = dither(x, z);
-      const info = BIOMES[world.classify(h + blur * 2.2, world.moisture(x, z) + blur * 0.055,
-        world.temperature(x, z) + dither(z, x) * 0.05)];
-      // Steep ground shows rock; the flat tops keep their biome colour, with a little
-      // large-scale variation so a plain does not read as one flat sheet.
-      const steep = Math.min(1, world.slope(x, z, step) * 2.1);
+    }
+  }
+
+  // Second pass: colour. Slope comes from the surface just built rather than from four
+  // more field samples, which is both four sevenths cheaper and more truthful — the
+  // shading now follows the mesh, so the rim of a flattened settlement platform reads as
+  // the cliff it actually is.
+  for (let iz = 0; iz < side; iz++) {
+    for (let ix = 0; ix < side; ix++) {
+      const i = iz * side + ix;
+      const x = positions[i * 3], z = positions[i * 3 + 2];
+      const east = heights[iz * side + Math.min(ix + 1, side - 1)];
+      const west = heights[iz * side + Math.max(ix - 1, 0)];
+      const south = heights[Math.min(iz + 1, side - 1) * side + ix];
+      const north = heights[Math.max(iz - 1, 0) * side + ix];
+      const spanX = (Math.min(ix + 1, side - 1) - Math.max(ix - 1, 0)) * step;
+      const spanZ = (Math.min(iz + 1, side - 1) - Math.max(iz - 1, 0)) * step;
+      const steep = Math.min(1, Math.hypot((east - west) / spanX, (south - north) / spanZ) * 2.1);
+
+      // Blend the palettes of every biome the classifier reaches from here. Deep inside a
+      // biome that is one colour; near a threshold it is the mixture.
       const alt = (Math.sin(x * 0.031) + Math.cos(z * 0.027)) * 0.5;
-      const base = linear(alt > 0.15 ? info.groundAlt : info.ground);
-      const rock = linearB(info.cliff);
-      colours[i * 3] = base.r + (rock.r - base.r) * steep;
-      colours[i * 3 + 1] = base.g + (rock.g - base.g) * steep;
-      colours[i * 3 + 2] = base.b + (rock.b - base.b) * steep;
+      const slot = alt > 0.15 ? 1 : 0;
+      let br = 0, bg = 0, bb = 0, cr = 0, cg = 0, cb = 0;
+      for (let p = 0; p < PROBES.length; p++) {
+        const probe = PROBES[p];
+        const id = world.classify(heights[i] + probe[0], wet[i] + probe[1], warm[i] + probe[2]);
+        const w = probe[3], base = id * 9;
+        br += PALETTE[base + slot * 3] * w;
+        bg += PALETTE[base + slot * 3 + 1] * w;
+        bb += PALETTE[base + slot * 3 + 2] * w;
+        cr += PALETTE[base + 6] * w;
+        cg += PALETTE[base + 7] * w;
+        cb += PALETTE[base + 8] * w;
+      }
+      br /= PROBE_WEIGHT; bg /= PROBE_WEIGHT; bb /= PROBE_WEIGHT;
+      cr /= PROBE_WEIGHT; cg /= PROBE_WEIGHT; cb /= PROBE_WEIGHT;
+      colours[i * 3] = br + (cr - br) * steep;
+      colours[i * 3 + 1] = bg + (cg - bg) * steep;
+      colours[i * 3 + 2] = bb + (cb - bb) * steep;
     }
   }
 
@@ -307,14 +365,259 @@ function settlementGeometry(world, site, sites) {
   return { solid, glass };
 }
 
+// ---------------------------------------------------------------- landmarks
+// The one unmistakable structure in each region. These are built for silhouette: you
+// should know which of the nine you are looking at from a kilometre out and from this
+// camera angle, which is why each one commits to a single strong shape — a tower, a wall,
+// a dish, a hull, a pyramid — rather than a cluster of boxes.
+function shapeShop() {
+  const parts = [], glassParts = [];
+  const paint = (geo, hex, into = parts) => {
+    tmpA.setHex(hex);
+    const n = geo.getAttribute('position').count, arr = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { arr[i * 3] = tmpA.r; arr[i * 3 + 1] = tmpA.g; arr[i * 3 + 2] = tmpA.b; }
+    geo.setAttribute('color', new THREE.BufferAttribute(arr, 3));
+    into.push(geo);
+    return geo;
+  };
+  const box = (x, y, z, w, h, d, hex, turn = 0, tilt = 0) => {
+    const g = new THREE.BoxGeometry(w, h, d);
+    if (tilt) g.rotateX(tilt);
+    if (turn) g.rotateY(turn);
+    g.translate(x, y, z);
+    return paint(g, hex);
+  };
+  const cyl = (x, y, z, r, h, hex, seg = 8, lie = 0, turn = 0) => {
+    const g = new THREE.CylinderGeometry(r, r, h, seg);
+    if (lie) g.rotateZ(Math.PI / 2);
+    if (turn) g.rotateY(turn);
+    g.translate(x, y, z);
+    return paint(g, hex);
+  };
+  const cone = (x, y, z, r, h, hex, seg = 8) => {
+    const g = new THREE.ConeGeometry(r, h, seg);
+    g.translate(x, y, z);
+    return paint(g, hex);
+  };
+  // Glazing is the same box, routed to the other material so the whole chunk still shares
+  // one mesh per material class.
+  const glass = (x, y, z, w, h, d, turn = 0) => {
+    const g = new THREE.BoxGeometry(w, h, d);
+    if (turn) g.rotateY(turn);
+    g.translate(x, y, z);
+    return paint(g, 0x173b4a, glassParts);
+  };
+  return { parts, glassParts, paint, box, cyl, cone, glass };
+}
+
+const CONCRETE = 0x8e9186, STONE = 0x8a8270, METAL = 0x6f7a72, RUST = 0xa9552f,
+  SALT = 0xe8e4d2, DARK = 0x33342c, PALE = 0xcfc9ab, DECK = 0x4b5550;
+
+function landmarkGeometry(world, mark, sites) {
+  const shop = shapeShop();
+  const { box, cyl, cone, glass } = shop;
+  const g = mark.height;               // the floor this thing stands on
+  const r = mark.radius;
+  const jitter = n => {
+    let h = Math.imul(mark.x * 7919 + mark.z * 104729 + n * 61, 2246822519);
+    return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+  };
+
+  switch (mark.key) {
+    case 'chapel': {                   // a bell tower in standing water
+      box(mark.x, g + 0.4, mark.z, r * 0.9, 0.8, r * 0.9, DECK);          // the flooded platform
+      box(mark.x, g + 7, mark.z, 7, 14, 7, PALE);                          // the tower
+      box(mark.x, g + 14.6, mark.z, 8.2, 1.4, 8.2, STONE);
+      cone(mark.x, g + 17.4, mark.z, 5.4, 5, 0x6a4f3a, 4);                 // the spire
+      glass(mark.x, g + 9.5, mark.z - 3.6, 2.2, 4, 0.3);
+      box(mark.x + 7, g + 3, mark.z + 3, 10, 6, 8, PALE, 0.3);             // the nave, half sunk
+      box(mark.x + 7, g + 6.4, mark.z + 3, 11, 1, 9, 0x8a4a3a, 0.3);
+      for (let i = 0; i < 7; i++) {                                        // stilt houses
+        const a = i / 7 * Math.PI * 2 + 0.4, d = r * (0.62 + jitter(i) * 0.3);
+        const hx = mark.x + Math.cos(a) * d, hz = mark.z + Math.sin(a) * d;
+        for (const [ox, oz] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]]) {
+          cyl(hx + ox, g + 1.4, hz + oz, 0.22, 3, 0x4e4630, 5);
+        }
+        box(hx, g + 3.9, hz, 4.4, 2.6, 4.4, i % 2 ? 0xb9ae86 : 0x9aa177, a);
+        box(hx, g + 5.4, hz, 5, 0.5, 5, 0x7a6a4a, a);
+      }
+      break;
+    }
+    case 'strip': {                    // two kilometres of cracked runway
+      box(mark.x, g + 0.18, mark.z, r * 2.2, 0.36, 13, 0x4a524e, 0.12);
+      for (let i = -7; i <= 7; i++) box(mark.x + i * r * 0.14, g + 0.38, mark.z, 6, 0.08, 0.7, PALE, 0.12);
+      box(mark.x, g + 0.3, mark.z - 16, r * 1.2, 0.3, 9, 0x555c52, 0.12);  // the apron
+      box(mark.x - r * 0.6, g + 4, mark.z - 20, 7, 8, 7, PALE);            // the tower
+      glass(mark.x - r * 0.6, g + 7.6, mark.z - 20, 7.6, 2.6, 7.6);
+      box(mark.x - r * 0.6, g + 9.4, mark.z - 20, 8.6, 0.6, 8.6, RUST);
+      for (let i = 0; i < 2; i++) {                                        // the airliners
+        const ax = mark.x + (i ? r * 0.42 : -r * 0.1), az = mark.z - 17 + i * 3;
+        const turn = 0.12 + (i ? 0.5 : -0.3);
+        cyl(ax, g + 2.6, az, 2.1, 26, PALE, 10, 1, turn);
+        cone(ax + Math.cos(turn) * 14.5, g + 2.6, az + Math.sin(turn) * 14.5, 2.1, 5, PALE, 10);
+        box(ax, g + 2.2, az, 8, 0.4, 20, 0xb4b1a0, turn + Math.PI / 2);    // wings
+        box(ax - Math.cos(turn) * 12, g + 5.4, az - Math.sin(turn) * 12, 0.5, 6, 4, 0x9fa596, turn);
+      }
+      break;
+    }
+    case 'boneyard': {                 // rows of stripped fuselages
+      box(mark.x, g + 0.16, mark.z, r * 1.9, 0.32, r * 1.5, 0x9c8661);
+      for (let row = 0; row < 3; row++) {
+        for (let i = 0; i < 4; i++) {
+          const bx = mark.x - r * 0.7 + i * r * 0.46 + jitter(row * 9 + i) * 4;
+          const bz = mark.z - r * 0.5 + row * r * 0.5;
+          const turn = 1.35 + (jitter(row * 13 + i) - 0.5) * 0.5;
+          cyl(bx, g + 1.9, bz, 1.6, 15 + jitter(i) * 6, i % 2 ? 0xb6ae9a : 0x9c9a88, 8, 1, turn);
+          if (i % 2) box(bx + 5, g + 4.2, bz, 0.4, 5, 3.4, 0x8d8b7a, turn);
+          if (row === 1) box(bx, g + 1.4, bz + 3.4, 7, 0.35, 2.4, 0x7f7d6c, turn);
+        }
+      }
+      cyl(mark.x + r * 0.8, g + 5, mark.z - r * 0.4, 0.4, 10, RUST, 6);    // the crane
+      box(mark.x + r * 0.8 - 3, g + 9.6, mark.z - r * 0.4, 8, 0.7, 0.7, RUST);
+      for (let i = 0; i < 5; i++) box(mark.x - r * 0.85, g + 0.9 + i * 0.5, mark.z + r * 0.55 + i * 0.3, 9, 0.45, 3.4, 0x8a8878, 0.2);
+      break;
+    }
+    case 'dam': {                      // a wall across the valley
+      const wall = r * 2.3;
+      box(mark.x, g + 11, mark.z, wall, 24, 7, CONCRETE, 0.08);
+      box(mark.x, g + 23.4, mark.z, wall + 1.6, 1.2, 9.4, 0xa7a99c, 0.08); // the roadway
+      for (let i = -4; i <= 4; i++) box(mark.x + i * wall * 0.1, g + 24.6, mark.z - 4.4, 0.5, 1.4, 0.5, DARK);
+      for (let i = -1; i <= 1; i++) {                                      // spillway gates
+        box(mark.x + i * wall * 0.22, g + 6, mark.z + 3.4, wall * 0.13, 12, 1.4, RUST);
+      }
+      box(mark.x, g + 1.2, mark.z - 14, wall * 0.9, 2.4, 20, 0x3f5f66);    // impounded water
+      box(mark.x + wall * 0.42, g + 3.4, mark.z + 9, 9, 7, 8, PALE);       // the power house
+      glass(mark.x + wall * 0.42, g + 4.4, mark.z + 13.1, 5, 2.4, 0.3);
+      cyl(mark.x - wall * 0.4, g + 14, mark.z + 4, 0.5, 6, METAL, 6);
+      break;
+    }
+    case 'observatory': {              // a dish on the roof of the region
+      box(mark.x, g + 0.5, mark.z, r * 1.3, 1, r * 1.3, 0x77786c);
+      box(mark.x, g + 3, mark.z, 11, 5, 11, CONCRETE);                     // the bunker
+      glass(mark.x, g + 3.4, mark.z + 5.6, 6, 1.8, 0.3);
+      box(mark.x, g + 6, mark.z, 12, 1, 12, 0x6c6d62);
+      cyl(mark.x, g + 9, mark.z, 1.5, 6, METAL, 10);                       // the pedestal
+      const bowl = new THREE.SphereGeometry(9.5, 18, 7, 0, Math.PI * 2, 0, Math.PI / 2.6);
+      bowl.rotateX(Math.PI * 0.72);
+      bowl.translate(mark.x, g + 15.5, mark.z + 1);
+      shop.paint(bowl, PALE);
+      cyl(mark.x, g + 19.5, mark.z + 4.5, 0.3, 9, DARK, 5);                // the feed horn
+      for (let i = 0; i < 3; i++) {
+        const a = i / 3 * Math.PI * 2;
+        cyl(mark.x + Math.cos(a) * 12, g + 4.5, mark.z + Math.sin(a) * 12, 0.22, 8, METAL, 5);
+      }
+      break;
+    }
+    case 'freighter': {                // aground and broken in two
+      const bow = { x: mark.x - 13, z: mark.z - 5 }, stern = { x: mark.x + 14, z: mark.z + 4 };
+      box(bow.x, g + 2.4, bow.z, 12, 6.4, 30, 0x6b5a4e, 0.22, -0.1);       // the fore hull
+      box(bow.x, g + 5.8, bow.z, 12.6, 0.6, 30, DECK, 0.22);
+      cone(bow.x - Math.sin(0.22) * 15.5, g + 2.4, bow.z - Math.cos(0.22) * 15.5, 5.6, 9, 0x6b5a4e, 6);
+      box(stern.x, g + 2.1, stern.z, 12, 6, 26, 0x6b5a4e, 0.44, 0.13);     // the aft hull
+      box(stern.x, g + 5.2, stern.z, 12.6, 0.6, 26, DECK, 0.44);
+      box(stern.x + 3, g + 8.4, stern.z + 6, 10, 6.4, 8, PALE, 0.44);      // the bridge
+      glass(stern.x + 3, g + 10.4, stern.z + 6, 10.4, 1.9, 8.4, 0.44);
+      cyl(stern.x + 1, g + 13.5, stern.z - 2, 2.4, 8, RUST, 8);            // the funnel
+      for (let i = 0; i < 9; i++) {                                        // spilled containers
+        const a = jitter(i) * Math.PI * 2, d = r * (0.5 + jitter(i + 20) * 0.6);
+        box(mark.x + Math.cos(a) * d, g + 1.4, mark.z + Math.sin(a) * d, 7, 2.8, 3,
+          [0xa9552f, 0x3f6b74, 0x8a8f5f, 0x9a4a52][i % 4], a);
+      }
+      break;
+    }
+    case 'steps': {                    // a stone pyramid above the canopy
+      const tiers = 6;
+      for (let i = 0; i < tiers; i++) {
+        const w = r * 1.7 * (1 - i / tiers * 0.78);
+        box(mark.x, g + 1.4 + i * 3.4, mark.z, w, 3.4, w, i % 2 ? STONE : 0x94886f);
+      }
+      box(mark.x, g + tiers * 3.4 + 2.4, mark.z, 7, 4.4, 7, 0x7e7460);     // the shrine on top
+      box(mark.x, g + tiers * 3.4 + 5, mark.z, 8.4, 0.8, 8.4, 0x6a6150);
+      // the stair up one face
+      for (let i = 0; i < tiers * 3; i++) {
+        box(mark.x, g + 0.9 + i * 0.72, mark.z + r * 0.86 - i * 0.62, 6.4, 0.7, 0.9, 0x9d9079);
+      }
+      for (let i = 0; i < 6; i++) {                                        // stelae
+        const a = i / 6 * Math.PI * 2 + 0.5;
+        box(mark.x + Math.cos(a) * r * 1.15, g + 2.4, mark.z + Math.sin(a) * r * 1.15, 1.4, 5, 1, 0x8b8168, a);
+      }
+      break;
+    }
+    case 'evaporators': {              // a grid of white pans
+      box(mark.x, g + 0.12, mark.z, r * 1.9, 0.24, r * 1.9, 0xb9b39a);
+      for (let gz = -1; gz <= 1; gz++) {
+        for (let gx = -1; gx <= 1; gx++) {
+          const px = mark.x + gx * r * 0.62, pz = mark.z + gz * r * 0.62;
+          const pan = r * 0.52;
+          box(px, g + 0.34, pz, pan, 0.3, pan, jitter(gx * 3 + gz) > 0.5 ? 0xd9d8c2 : 0xc3cfc6);
+          for (const [ox, oz, w, d] of [[pan / 2, 0, 0.6, pan], [-pan / 2, 0, 0.6, pan], [0, pan / 2, pan, 0.6], [0, -pan / 2, pan, 0.6]]) {
+            box(px + ox, g + 0.7, pz + oz, w, 0.9, d, 0x9c9880);
+          }
+        }
+      }
+      for (let i = 0; i < 4; i++) cone(mark.x - r * 0.3 + i * r * 0.25, g + 3, mark.z - r * 1.02, 4.6, 6.4, SALT, 9);
+      box(mark.x, g + 7, mark.z - r * 1.02, r * 1.5, 0.8, 1.6, METAL, 0.04); // the conveyor
+      for (let i = -2; i <= 2; i++) cyl(mark.x + i * r * 0.34, g + 3.4, mark.z - r * 1.02, 0.3, 7, METAL, 5);
+      box(mark.x + r * 0.9, g + 3, mark.z - r * 1.02, 8, 6.4, 7, 0xb1a98e);
+      glass(mark.x + r * 0.9, g + 3.6, mark.z - r * 1.02 + 3.6, 4.4, 2, 0.3);
+      break;
+    }
+    case 'interchange': {              // four levels of motorway that stopped being built
+      const decks = [
+        { y: 4.5, turn: 0.1, len: 2.2, w: 11 },
+        { y: 10.5, turn: Math.PI / 2 + 0.16, len: 2.0, w: 11 },
+        { y: 16, turn: 0.82, len: 1.7, w: 9 },
+        { y: 21, turn: -0.62, len: 1.3, w: 8 },
+      ];
+      box(mark.x, g + 0.2, mark.z, r * 1.7, 0.4, r * 1.7, 0x6f6a55);
+      decks.forEach((deck, i) => {
+        box(mark.x, g + deck.y, mark.z, r * deck.len, 1.1, deck.w, 0x8d8f85, deck.turn);
+        box(mark.x, g + deck.y + 1.1, mark.z, r * deck.len, 0.5, deck.w + 1.4, 0x74766d, deck.turn);
+        const span = r * deck.len / 2;
+        for (let k = -1; k <= 1; k += 2) {
+          const px = mark.x + Math.cos(deck.turn) * span * k * 0.72;
+          const pz = mark.z + Math.sin(deck.turn) * span * k * 0.72;
+          cyl(px, g + deck.y / 2, pz, 1.5, deck.y, CONCRETE, 8);
+        }
+        cyl(mark.x, g + deck.y / 2, mark.z, 2.1, deck.y, CONCRETE, 8);
+        if (i === 3) {                                                      // the unfinished end
+          const px = mark.x + Math.cos(deck.turn) * span, pz = mark.z + Math.sin(deck.turn) * span;
+          for (let k = 0; k < 4; k++) cyl(px, g + deck.y + 1.8 + k * 0.1, pz + k - 1.5, 0.16, 3.4, RUST, 4);
+        }
+      });
+      for (let i = 0; i < 8; i++) {                                         // the market underneath
+        const a = jitter(i) * Math.PI * 2, d = r * (0.42 + jitter(i + 11) * 0.5);
+        box(mark.x + Math.cos(a) * d, g + 1.4, mark.z + Math.sin(a) * d, 4.4, 2.4, 4,
+          [0xa9552f, 0xdfd9bb, 0x647f76, 0x8a8f5f][i % 4], a);
+      }
+      break;
+    }
+  }
+
+  // Every landmark carries a light. From this camera a lit mast is how you pick a place
+  // out of ten kilometres of ground, and it is the same signal for all nine.
+  cyl(mark.x + r * 0.78, g + 7, mark.z - r * 0.78, 0.26, 14, METAL, 5);
+  box(mark.x + r * 0.78, g + 14.4, mark.z - r * 0.78, 1.5, 1.5, 1.5, 0xf3b25e);
+
+  const solid = mergeAll(shop.parts);
+  for (const geo of shop.parts) if (geo !== solid) geo.dispose();
+  const glassMesh = mergeAll(shop.glassParts);
+  for (const geo of shop.glassParts) geo.dispose();
+  return { solid, glass: glassMesh };
+}
+
 // ---------------------------------------------------------------- the chunk
 export function buildChunk(world, materials, cx, cz, lod) {
   const group = new THREE.Group();
   group.matrixAutoUpdate = false;
   const centreX = (cx + 0.5) * WORLD.chunk, centreZ = (cz + 0.5) * WORLD.chunk;
-  // Settlements are gathered once and shared by the ground, the props and the buildings so
-  // all three agree on where the flattened platforms are.
-  const sites = world.settlementsNear(centreX, centreZ, WORLD.chunk * 1.4);
+  // Platforms are gathered once and shared by the ground, the props and the buildings so
+  // all three agree on where the flattened ground is. Landmarks that were built rather
+  // than run aground are in this list too, which is why a dish on a summit gets a level
+  // apron instead of a tilted one.
+  const sites = world.platformsNear(centreX, centreZ, WORLD.chunk * 1.4);
+  const inThisChunk = p => Math.floor(p.x / WORLD.chunk) === cx && Math.floor(p.z / WORLD.chunk) === cz;
+  const marks = world.landmarksNear(centreX, centreZ, WORLD.chunk * 1.4).filter(inThisChunk);
 
   const ground = groundGeometry(world, cx, cz, lod, sites);
   const groundMesh = new THREE.Mesh(ground.geometry, materials.ground);
@@ -333,9 +636,18 @@ export function buildChunk(world, materials, cx, cz, lod) {
   const built = [], glassPieces = [];
   if (lod <= 1) {
     for (const site of sites) {
-      if (Math.floor(site.x / WORLD.chunk) !== cx || Math.floor(site.z / WORLD.chunk) !== cz) continue;
+      if (site.landmark || !inThisChunk(site)) continue;
       const geo = settlementGeometry(world, site, sites);
       built.push(geo.solid);
+      if (geo.glass) glassPieces.push(geo.glass);
+    }
+  }
+  // Landmarks are built one detail level further out than settlements: they are the thing
+  // you navigate by, so they have to be there before you are on top of them.
+  if (lod <= 2) {
+    for (const mark of marks) {
+      const geo = landmarkGeometry(world, mark, sites);
+      if (geo.solid) built.push(geo.solid);
       if (geo.glass) glassPieces.push(geo.glass);
     }
   }
@@ -360,7 +672,7 @@ export function buildChunk(world, materials, cx, cz, lod) {
   return {
     group, cx, cz, lod, triangles, heights: ground.heights, side: ground.side,
     step: ground.step, originX: ground.originX, originZ: ground.originZ,
-    settlements: sites.filter(s => Math.floor(s.x / WORLD.chunk) === cx && Math.floor(s.z / WORLD.chunk) === cz),
+    settlements: sites.filter(s => !s.landmark && inThisChunk(s)), landmarks: marks,
     dispose() {
       group.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
       group.removeFromParent();

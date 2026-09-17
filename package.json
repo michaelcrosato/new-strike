@@ -7,10 +7,11 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs",
-    "test": "node --test tests/core.test.mjs tests/campaign.test.mjs tests/world.test.mjs tests/agency.test.mjs tests/field.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/campaign.test.mjs tests/world.test.mjs tests/agency.test.mjs tests/field.test.mjs tests/region.test.mjs tests/jobs.test.mjs",
     "verify": "node tests/browser.mjs",
     "build:world": "node scripts/build-world.mjs",
-    "world": "node scripts/build-world.mjs && node scripts/serve.mjs"
+    "world": "node scripts/build-world.mjs && node scripts/serve.mjs",
+    "verify:world": "node tests/world-browser.mjs"
   },
   "dependencies": {
     "three": "0.186.0"

@@ -180,8 +180,11 @@ function pickContract(profile, kind) {
 function flyMission(kind) {
   const profile = createProfile();
   profile.heli.hardpoint = 3;
-  const contract = pickContract(profile, kind);
-  assert.ok(contract, `${kind} appears on the board`);
+  const offered = pickContract(profile, kind);
+  assert.ok(offered, `${kind} appears on the board`);
+  // Complications are exercised on their own in jobs.test.mjs; a plain flight of each
+  // kind should not be at the mercy of whichever twist the board happened to attach.
+  const contract = { ...offered, complication: null };
   accept(profile, contract);
   const combat = ready(profile);
   const state = startMission(world, profile, contract, combat);
@@ -200,13 +203,27 @@ function flyMission(kind) {
     if (kind === 'interdiction') { state.runner.dead = true; tick(0.2); continue; }
     if (kind === 'escort') { combat.hostiles = []; go(state.convoy.x, state.convoy.z); tick(30); continue; }
     if (kind === 'patrol') { const next = state.waypoints.find(p => !p.seen); if (next) { go(next.x, next.z); tick(0.2); } continue; }
+    if (kind === 'spotter') {
+      // Standing off is the job, so the test has to stand off too: out past the target on
+      // the far side from the site, where no other gun in the group is within the
+      // compromise radius.
+      const target = state.targets.find(t => !t.dead);
+      if (!target) { tick(0.2); continue; }
+      const dx = target.x - state.site.x, dz = target.z - state.site.z;
+      const len = Math.hypot(dx, dz) || 1;
+      go(target.x + dx / len * 60, target.z + dz / len * 60);
+      tick(6, { interact: true });
+      continue;
+    }
+    if (kind === 'search') { go(state.beacon.x, state.beacon.z); tick(4, { interact: true }); continue; }
     go(status.marker.x, status.marker.z);
-    tick(12, { interact: true });
+    tick(24, { interact: true });
   }
   return { state, profile, contract, combat };
 }
 
-for (const kind of ['survey', 'delivery', 'extraction', 'salvage', 'patrol', 'escort', 'strike', 'interdiction']) {
+for (const kind of ['survey', 'delivery', 'extraction', 'salvage', 'patrol', 'escort', 'strike',
+  'interdiction', 'sabotage', 'spotter', 'search', 'smuggling']) {
   test(`a ${kind} contract can be flown to completion`, () => {
     const { state, contract } = flyMission(kind);
     assert.equal(state.failed, false, `${kind} did not fail: ${state.reason}`);

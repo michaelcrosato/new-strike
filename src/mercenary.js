@@ -20,6 +20,7 @@ import { createCombat, rearm, syncHostiles, stepCombat, availableWeapons, combat
   WEAPONS, hitCraft } from './combat.js';
 import { startMission, stepMission, missionStatus, clearMission } from './missions.js';
 import { EntityView, TracerView } from './entities.js';
+import { AudioEngine } from './audio.js';
 
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -31,8 +32,14 @@ const home = world.home;
 // ---------------------------------------------------------------- renderer
 const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: false, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.AgXToneMapping;
-renderer.toneMappingExposure = 0.98;
+// Measured, not chosen by eye. Over four places in the region — the yard, the alpine
+// ridge, the delta and the salt pans — AgX put 94% of the frame into two brightness
+// buckets and averaged 0.41 saturation, which is why every area looked like the same pale
+// wash. Neutral at this exposure holds the same mean brightness and peak, spreads the
+// frame over four buckets, and carries 0.61 saturation: half again as much colour, which
+// is what lets nine regions read as nine places.
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.6;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft was removed in three r186
 renderer.shadowMap.autoUpdate = false;          // driven once per frame, not once per pass
@@ -115,8 +122,25 @@ function buildAirframe() {
   const disc = new THREE.Mesh(new THREE.RingGeometry(2.4, 8.5, 32),
     new THREE.MeshBasicMaterial({ color: 0x3d4b46, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false }));
   disc.rotation.x = -Math.PI / 2; disc.position.y = 1.95; body.add(disc);
+
+  // The winch. Five of the twelve contract kinds are things you lower a hook for, and
+  // without this the aircraft just hovered while numbers changed. The cable geometry hangs
+  // from its own origin so paying it out is a scale on one axis.
+  const cableGeometry = new THREE.CylinderGeometry(0.07, 0.07, 1, 5);
+  cableGeometry.translate(0, -0.5, 0);
+  const cable = paint(cableGeometry, 0x24241f);
+  const hook = paint(new THREE.BoxGeometry(1.5, 0.45, 1.5), 0xb5763f);
+  hook.castShadow = true;
+  const arm = paint(new THREE.BoxGeometry(1.8, 0.3, 0.3), 0x5d5b45);
+  arm.position.set(0.7, 0.2, 0);
+  const winch = new THREE.Group();
+  winch.add(cable, hook, arm);
+  winch.position.set(1.9, -0.5, 0.4);
+  winch.visible = false;
+  body.add(winch);
+
   group.scale.setScalar(0.92);
-  return { group, body, rotor, tail };
+  return { group, body, rotor, tail, winch, cable, hook };
 }
 const heli = buildAirframe();
 scene.add(heli.group);
@@ -194,6 +218,39 @@ function toggleYard() {
 }
 $('yard-close').addEventListener('click', toggleYard);
 
+// ---------------------------------------------------------------- the first morning
+// Arriving with no idea what anybody wants was the largest hole in the thing. This is the
+// only briefing, it happens once per seed, and it describes the region that was actually
+// generated rather than a region in general.
+function renderIntro() {
+  const homeRegion = world.regionAt(home.x, home.z);
+  const marks = world.landmarks();
+  const nearest = marks
+    .slice().sort((a, b) => Math.hypot(a.x - home.x, a.z - home.z) - Math.hypot(b.x - home.x, b.z - home.z))[0];
+  const km = v => (v * WORLD.metresPerUnit / 1000).toFixed(1);
+  $('intro-where').innerHTML = `${homeRegion.name}<br>SEED ${seed} · 10 × 10 KM`;
+  $('intro-quill').textContent =
+    `You are parked in ${homeRegion.name.replace(/^THE /, 'the ')}, which is as much as anybody will give you for free. `
+    + `${nearest.name} is ${km(Math.hypot(nearest.x - home.x, nearest.z - home.z))} kilometres out — `
+    + `learn the look of it, because it is how you find your way home when the panels are off. `
+    + `I have the radio, the books and the fuel. You have a machine held together by other people's spare parts. `
+    + `Nobody in this region owes us anything yet, and that is the only good news in the brief.`;
+  $('intro-region').textContent = homeRegion.character;
+  $('intro-areas').innerHTML = marks.map(mark => {
+    const region = world.regions.regions[mark.regionIndex];
+    return `<li><i style="background:${region.colour}"></i>${region.short} · ${mark.short}</li>`;
+  }).join('');
+}
+function showIntro() {
+  renderIntro();
+  $('intro').hidden = false;
+}
+$('intro-go').addEventListener('click', () => {
+  $('intro').hidden = true;
+  wakeAudio();
+  audio.event({ type: 'radio' });
+});
+
 function renderWeapons() {
   const list = availableWeapons(profile.heli);
   $('weapons').innerHTML = list.map((w, i) =>
@@ -204,11 +261,13 @@ function renderWeapons() {
 // The whole loop in miniature: work comes off the board, you fly it, and the region's
 // opinion of you moves. Everything here reads from the same generated world.
 const SAVE_KEY = 'merc.profile.' + seed;
+let returning = false;          // whether this seed has been flown before
 function loadProfile() {
   const fresh = createProfile({ seed });
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return fresh;
+    returning = true;
     const saved = JSON.parse(raw);
     // Merge rather than replace, so a save from an older build still boots.
     return { ...fresh, ...saved,
@@ -251,10 +310,12 @@ function renderBoard() {
   $('board').innerHTML = board.map((c, i) => {
     const faction = FACTIONS.find(f => f.key === c.issuer);
     return `<li data-index="${i}" class="${profile.active?.id === c.id ? 'taken' : ''}">
-      <b>${c.title}</b>
+      <b>${c.site.landmark ? '◆ ' : ''}${c.title}</b>
       <small><span style="color:${faction.colour}">${faction.short}</span>
       <span>${c.kindName} · RISK ${c.risk}</span>
-      <span>${c.distanceKm} KM · ${c.pay.toLocaleString()}</span></small></li>`;
+      <span>${c.distanceKm} KM · ${c.pay.toLocaleString()}</span></small>
+      <small><span class="where">${c.site.regionName ?? ''}</span>${c.complication
+        ? `<span class="twist">${c.complication.name}</span>` : ''}</small></li>`;
   }).join('');
   for (const item of $('board').children) {
     item.addEventListener('click', () => takeContract(board[Number(item.dataset.index)]));
@@ -311,16 +372,57 @@ function updateActive(dt) {
     if (event.type === 'waypoint') flash(event.left ? `WAYPOINT · ${event.left} LEFT` : 'SWEEP COMPLETE');
     if (event.type === 'convoyArrived') flash('COLUMN IS IN');
     if (event.type === 'convoyLost') flash('COLUMN LOST');
+    if (event.type === 'planted') flash(event.left ? `CHARGE SET · ${event.left} TO GO` : 'LAST CHARGE SET');
+    if (event.type === 'fuse') flash(`FUSE RUNNING · ${event.seconds} SECONDS · GET CLEAR`);
+    if (event.type === 'detonated') flash('CHARGES BLOWN');
+    if (event.type === 'caught') flash('CAUGHT IN THE BLAST');
+    if (event.type === 'called') flash(event.left ? `ROUNDS ON TARGET · ${event.left} LEFT` : 'ALL GUNS ACCOUNTED FOR');
+    if (event.type === 'lazeLost') flash('MARK LOST · HOLD IT STEADY');
+    if (event.type === 'scanLost') flash('SCAN LOST');
+    if (event.type === 'failed') flash(event.title);
+    const cue = audioForMission(event);
+    if (cue) audio.event(cue);
   }
   const status = missionStatus(mission, craft);
   $('mission-label').textContent = status.label;
   $('mission-bar').style.width = Math.round(status.progress * 100) + '%';
-  $('mission-range').textContent = status.marker
-    ? `${Math.round(status.range * WORLD.metresPerUnit)} m` + (status.holding ? ' · HOLDING' : '')
-    : '';
+  // The two kinds that read out something other than a range: a search has only signal
+  // strength, and a quiet run has only how close the nearest sensor is to seeing you.
+  let detail = status.marker ? `${Math.round(status.range * WORLD.metresPerUnit)} m` : '';
+  if (status.signal !== null) detail = `SIGNAL ${'▮'.repeat(Math.round(status.signal * 8)).padEnd(8, '▯')}`;
+  if (mission.kind === 'smuggling') {
+    detail = status.painted ? 'PAINTED · BREAK CONTACT'
+      : status.exposure < 2 ? `SENSOR ${Math.round(status.exposure * 100)}%` : detail;
+  }
+  if (status.fuse !== null) detail = `FUSE ${status.fuse.toFixed(1)} S`;
+  if (status.deadline !== null) detail += ` · ${Math.ceil(status.deadline)} S LEFT`;
+  if (status.holding) detail += ' · HOLDING';
+  $('mission-range').textContent = detail;
+  $('mission-twist').textContent = status.complication ?? '';
+  $('mission-twist').hidden = !status.complication;
   if (mission.done) settleContract(true);
   else if (mission.failed) settleContract(false, mission.title);
 }
+
+// Missions speak in their own vocabulary; the audio engine speaks in the campaign's. This
+// is the whole translation, in one place, so neither side has to know about the other.
+const MISSION_CUES = {
+  detonated: { type: 'explosion', size: 2.4 },
+  called: { type: 'explosion', size: 1.6 },
+  caught: { type: 'playerHit' },
+  aboard: { type: 'objective' },
+  scanned: { type: 'objective' },
+  dropped: { type: 'objective' },
+  planted: { type: 'objective' },
+  waypoint: { type: 'objective' },
+  convoyArrived: { type: 'objective' },
+  convoyLost: { type: 'incoming' },
+  failed: { type: 'incoming' },
+  fuse: { type: 'radio' },
+  lazeLost: { type: 'radio' },
+  scanLost: { type: 'radio' },
+};
+const audioForMission = event => MISSION_CUES[event.type] ?? null;
 
 // Losing the airframe costs the job and a chunk of cash, and puts you back in the yard.
 function loseAircraft() {
@@ -332,6 +434,21 @@ function loseAircraft() {
   combat.provoked = false;
   teleportHome();
 }
+
+// ---------------------------------------------------------------- sound
+// The rotor is a filtered noise loop with a beat under it, and everything else is a short
+// synthesised cue — the same engine the campaign uses, so the open world costs no assets.
+// A browser will not start an audio context without a gesture, so the first key or click
+// does it and nothing before that tries.
+const audio = new AudioEngine();
+let audioStarted = false;
+function wakeAudio() {
+  if (audioStarted) return;
+  audioStarted = true;
+  audio.start().catch(() => {});
+}
+addEventListener('keydown', wakeAudio, { once: true });
+addEventListener('pointerdown', wakeAudio, { once: true });
 
 let mouseFire = false;
 addEventListener('pointerdown', e => { if (e.button === 0 && $('yard').hidden && $('map-panel').hidden) mouseFire = true; });
@@ -360,7 +477,14 @@ const screenUp = new THREE.Vector3(-0.78, 0, -0.63).normalize();
 addEventListener('keydown', e => {
   if (e.code === 'Tab' || e.code === 'F5') return;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  // The briefing swallows everything until it is dismissed, so the first key you press
+  // does not send you off the pad mid-sentence.
+  if (!$('intro').hidden) {
+    if (e.code === 'Enter' || e.code === 'Escape' || e.code === 'Space') $('intro-go').click();
+    return;
+  }
   keys.add(e.code);
+  if (e.code === 'Escape') { for (const id of ['yard', 'map-panel']) if (!$(id).hidden) $(id).hidden = true; }
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyH') teleportHome();
   if (e.code === 'KeyG') { $('debug').classList.toggle('hidden'); $('outfit').classList.toggle('hidden'); $('hud').classList.toggle('hidden'); }
@@ -380,14 +504,19 @@ function teleportHome() {
   streamer.settle(craft.x, craft.z, 200);
 }
 
+// With a panel open the aircraft holds station instead of drifting off across the region
+// while you read. Fuel, repair and the rest of the loop keep running.
+const overlayOpen = () => !$('intro').hidden || !$('yard').hidden || !$('map-panel').hidden;
+
 function flight(dt) {
-  const dx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-  const dy = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+  const held = overlayOpen() ? new Set() : keys;
+  const dx = (held.has('KeyD') || held.has('ArrowRight') ? 1 : 0) - (held.has('KeyA') || held.has('ArrowLeft') ? 1 : 0);
+  const dy = (held.has('KeyS') || held.has('ArrowDown') ? 1 : 0) - (held.has('KeyW') || held.has('ArrowUp') ? 1 : 0);
   let mx = dx * screenRight.x - dy * screenUp.x;
   let mz = dx * screenRight.z - dy * screenUp.z;
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
-  const boost = keys.has('ShiftLeft') || keys.has('ShiftRight');
+  const boost = held.has('ShiftLeft') || held.has('ShiftRight');
   const speed = boost ? 46 : 26;
   const drag = 1 - Math.exp(-3.4 * dt);
   craft.vx += (mx * speed - craft.vx) * drag;
@@ -398,7 +527,7 @@ function flight(dt) {
 
   // Terrain following: hold a clearance over whatever is below, climb fast, sink slowly.
   const ground = world.groundHeight(craft.x, craft.z);
-  const lift = keys.has('Space') ? 26 : keys.has('KeyC') ? -14 : 0;
+  const lift = held.has('Space') ? 26 : held.has('KeyC') ? -14 : 0;
   const wanted = Math.max(ground + 11, craft.y + lift * dt * 6);
   craft.y += (wanted - craft.y) * (1 - Math.exp(-(wanted > craft.y ? 4.5 : 1.8) * dt));
   craft.y = clamp(craft.y, ground + 4, 260);
@@ -422,6 +551,41 @@ function flight(dt) {
     if (combat.fuel <= 0) loseAircraft();
   }
   combat.invulnerable = Math.max(0, (combat.invulnerable ?? 0) - dt);
+}
+
+// ---------------------------------------------------------------- winch and weather
+// The kinds that are a hook on a cable rather than a trigger.
+const WINCH_KINDS = new Set(['extraction', 'salvage', 'search', 'delivery', 'sabotage']);
+let cableOut = 0;
+function updateWinch(dt) {
+  const usable = profile.heli.winch > 0 && mission && WINCH_KINDS.has(mission.kind);
+  const running = usable && keys.has('KeyE');
+  // Paid out to just above whatever is underneath, so the hook reaches the ground you are
+  // hovering over rather than a fixed length into it.
+  const clearance = running ? clamp(craft.y - world.groundHeight(craft.x, craft.z) - 1.5, 1, 22) : 0;
+  cableOut += (clearance - cableOut) * (1 - Math.exp(-(running ? 3.2 : 5.5) * dt));
+  heli.winch.visible = usable && cableOut > 0.08;
+  if (!heli.winch.visible) return;
+  heli.cable.scale.y = cableOut;
+  heli.hook.position.y = -cableOut;
+  // A little sway, so it reads as hanging rather than welded on.
+  heli.winch.rotation.z = Math.sin(clock * 2.1) * 0.05 * Math.min(1, cableOut / 6);
+}
+
+// Weather is a complication, not a simulation: one job in a few arrives with the
+// visibility going, and it closes in and lifts again with the contract.
+const CLEAR = { fog: 0.00085, sun: 2.6, sky: 0x8aa6a0, tint: 0x9fb3ad };
+const CLOSED = { fog: 0.0027, sun: 1.55, sky: 0x74837f, tint: 0x8b9a96 };
+const skyColour = new THREE.Color(), fogColour = new THREE.Color();
+function updateWeather(dt) {
+  const closing = !!mission?.weather;
+  const want = closing ? CLOSED : CLEAR;
+  const rate = 1 - Math.exp(-0.5 * dt);
+  scene.fog.density += (want.fog - scene.fog.density) * rate;
+  sun.intensity += (want.sun - sun.intensity) * rate;
+  skyColour.setHex(want.sky); fogColour.setHex(want.tint);
+  scene.background.lerp(skyColour, rate);
+  scene.fog.color.lerp(fogColour, rate);
 }
 
 function updateCamera(dt, snap = false) {
@@ -500,6 +664,20 @@ function drawMap() {
   }
   ctx.putImageData(image, 0, 0);
   const toMap = (x, z) => [(x / WORLD.size + 0.5) * size, (z / WORLD.size + 0.5) * size];
+
+  // Region names first, underneath everything else, so the map reads as nine places before
+  // it reads as a list of villages.
+  ctx.textAlign = 'center';
+  for (const region of world.regions.regions) {
+    const [rx, ry] = toMap(region.x, region.z);
+    ctx.font = '700 11px "Barlow Condensed", Barlow, sans-serif';
+    ctx.fillStyle = 'rgba(12,26,24,.55)';
+    ctx.fillText(region.name, rx + 1, ry + 1);
+    ctx.fillStyle = region.colour;
+    ctx.fillText(region.name, rx, ry);
+  }
+  ctx.textAlign = 'left';
+
   for (const site of world.allSettlements()) {
     const [mx, my] = toMap(site.x, site.z);
     ctx.fillStyle = FACTIONS[site.faction].colour;
@@ -510,6 +688,24 @@ function drawMap() {
       ctx.fillText(site.name, mx + 6, my + 3);
     }
   }
+  // Landmarks get a diamond and a name at any zoom: one per region, and the only thing on
+  // the map you can reliably find again from the air.
+  for (const mark of world.landmarks()) {
+    const [mx, my] = toMap(mark.x, mark.z);
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#f4edc9';
+    ctx.strokeStyle = '#1c2a26'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.rect(-3.4, -3.4, 6.8, 6.8); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    ctx.font = '700 9px Barlow, sans-serif';
+    ctx.fillStyle = 'rgba(12,26,24,.7)';
+    ctx.fillText(mark.short, mx + 8, my + 4);
+    ctx.fillStyle = '#f4edc9';
+    ctx.fillText(mark.short, mx + 7, my + 3);
+  }
+
   const [hx, hy] = toMap(home.x, home.z);
   ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.stroke();
@@ -550,9 +746,17 @@ function frame(now) {
     { fire: keys.has('Space') || mouseFire, flare: keys.has('KeyF') }, dt);
   for (const event of events) {
     if (event.type === 'destroyed') {
-      profile.cash += Math.round(event.score / 4);
-      flash(`${event.unit.toUpperCase()} DESTROYED · +${Math.round(event.score / 4)}`);
+      // Salvage rights: the fee is lower, but what you break on the way is yours.
+      const bounty = Math.round(event.score / 4 * (mission?.salvageRights ? 2 : 1));
+      profile.cash += bounty;
+      flash(`${event.unit.toUpperCase()} DESTROYED · +${bounty}`);
+      audio.event({ type: 'explosion', size: event.size ?? 1.4 });
     }
+    if (event.type === 'shot') audio.event({ type: 'shot', weapon: event.weapon });
+    if (event.type === 'craftHit') audio.event({ type: 'playerHit' });
+    if (event.type === 'incoming') audio.event({ type: 'incoming' });
+    if (event.type === 'flare') audio.event({ type: 'flares' });
+    if (event.type === 'blast') audio.event({ type: 'explosion', size: 1 });
     if (event.type === 'downed') loseAircraft();
   }
   const deltas = combatStandingDeltas(events);
@@ -567,6 +771,9 @@ function frame(now) {
   heli.rotor.rotation.y = clock * 34;
   heli.tail.rotation.x = clock * 44;
   seaTime.value = clock;
+  updateWinch(dt);
+  updateWeather(dt);
+  audio.update(Math.hypot(craft.vx, craft.vz), 'playing');
 
   renderer.shadowMap.needsUpdate = true;
   renderer.info.reset();
@@ -585,10 +792,16 @@ function updateReadout(streamed) {
   $('alt').textContent = `${Math.round((craft.y - s.height) * WORLD.metresPerUnit)} m AGL`;
   $('speed').textContent = `${Math.round(Math.hypot(craft.vx, craft.vz) * WORLD.metresPerUnit * 3.6)} km/h`;
   $('biome').textContent = BIOMES[s.biome].name;
+  const region = world.regionAt(craft.x, craft.z);
+  $('region').textContent = region.name;
+  $('region').style.color = region.colour;
   $('territory').textContent = s.faction < 0 ? 'UNCLAIMED WATER' : FACTIONS[s.faction].name;
   $('territory').style.color = s.faction < 0 ? '#9fb49d' : FACTIONS[s.faction].colour;
-  const near = world.settlementsNear(craft.x, craft.z, 320)
-    .sort((a, b) => Math.hypot(a.x - craft.x, a.z - craft.z) - Math.hypot(b.x - craft.x, b.z - craft.z))[0];
+  // Landmarks count as places, and outrank a village at the same distance — they are what
+  // you actually navigate by.
+  const near = [...world.settlementsNear(craft.x, craft.z, 320), ...world.landmarksNear(craft.x, craft.z, 460)]
+    .sort((a, b) => (Math.hypot(a.x - craft.x, a.z - craft.z) - (a.landmark ? 140 : 0))
+      - (Math.hypot(b.x - craft.x, b.z - craft.z) - (b.landmark ? 140 : 0)))[0];
   $('nearest').textContent = near
     ? `${near.name} · ${near.kindName} · ${FACTIONS[near.faction].short} · ${Math.round(Math.hypot(near.x - craft.x, near.z - craft.z) * WORLD.metresPerUnit)} m`
     : 'NOTHING WITHIN 1.6 KM';
@@ -616,6 +829,7 @@ try {
   renderOutfit();
   renderWeapons();
   $('loading').hidden = true;
+  if (!returning) showIntro();
   requestAnimationFrame(frame);
 } catch (error) {
   console.error(error);
@@ -641,7 +855,18 @@ window.merc = {
     draw: renderer.info.render.calls, drawn: renderer.info.render.triangles,
     fps: Math.round(fps), streamMs: +buildHitch.toFixed(2),
     stats: { ...streamer.stats },
+    region: world.regionAt(craft.x, craft.z).key,
+    regionNodes: world.regions.stats().nodes,
+    fog: +scene.fog.density.toFixed(5),
+    cable: +cableOut.toFixed(2),
+    intro: !$('intro').hidden,
   }),
+  regions: () => world.regions.regions.map(r => ({ key: r.key, name: r.name, x: r.x, z: r.z })),
+  marks: () => world.landmarks().map(m => ({ key: m.key, short: m.short, x: m.x, z: m.z,
+    height: +m.height.toFixed(1), region: m.region })),
+  intro: () => { showIntro(); return true; },
+  dismiss: () => { $('intro-go').click(); return true; },
+  audio,
   combat, mission: () => mission, profileRef: profile, saveProfile,
   // Runs the real loop synchronously, for inspection without waiting on frames.
   simulate: (seconds, input = {}) => {
@@ -654,6 +879,10 @@ window.merc = {
       for (const e of evs) { if (e.type === "destroyed") profile.cash += Math.round(e.score / 4); if (e.type === "downed") loseAircraft(); }
       const d = combatStandingDeltas(evs); if (Object.keys(d).length) applyStanding(profile, d);
       updateActive(step);
+      // The same per-frame updates the real loop runs, so what the harness exercises is
+      // what the game does rather than a subset of it.
+      updateWinch(step);
+      updateWeather(step);
       streamer.update(craft.x, craft.z);
     }
     keys.clear();
@@ -661,7 +890,30 @@ window.merc = {
       hostiles: combat.hostiles.length, cash: profile.cash, mission: mission && { kind: mission.kind, stage: mission.stage, progress: +mission.progress.toFixed(2), done: mission.done, failed: mission.failed } };
   },
   yard: () => { toggleYard(); return true; },
-  teleport: (x, z) => { craft.x = x; craft.z = z; craft.y = world.groundHeight(x, z) + 16; cameraFocus.set(x, 0, z); streamer.settle(x, z, 300); updateCamera(0, true); },
+  // Puts a named kind of work on the board and takes it, so every one of the twelve can be
+  // exercised against the built bundle rather than only against the modules.
+  offer: kind => {
+    for (let day = profile.day; day < profile.day + 300; day++) {
+      const found = generateContracts(world, profile, { day, count: 8 }).find(c => c.kind === kind);
+      if (!found) continue;
+      board = [found];
+      renderBoard();
+      takeContract(found);
+      return true;
+    }
+    return false;
+  },
+  status: () => (mission ? missionStatus(mission, craft) : null),
+  winchOut: () => cableOut,
+  teleport: (x, z) => {
+    craft.x = x; craft.z = z; craft.y = world.groundHeight(x, z) + 16;
+    cameraFocus.set(x, 0, z);
+    streamer.settle(x, z, 300);
+    updateCamera(0, true);
+    // Refresh the panel immediately: it is otherwise only redrawn on alternate quarter
+    // seconds, so a screenshot taken straight after a jump could show the old position.
+    updateReadout({ pending: streamer.queue.length });
+  },
   render: () => { renderer.info.reset(); renderer.shadowMap.needsUpdate = true; composer.render(); },
   desired: () => desiredChunks(craft.x, craft.z).length,
   drawMap,

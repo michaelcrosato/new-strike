@@ -96,8 +96,48 @@ export const CONTRACT_KINDS = [
     hostileTarget: true, blurb: 'Someone wants this stopped and does not care how.' },
   { key: 'interdiction', name: 'INTERDICTION', verb: 'Stop the movement out of', basePay: 3000, risk: 4,
     hostileTarget: true, blurb: 'Something is leaving. It should not arrive.' },
+  // The second four ask for something other than "fly there and shoot it", which is what
+  // the first eight all eventually become. Each one inverts a habit: stand off instead of
+  // closing, navigate on an instrument instead of a marker, route around instead of
+  // through, and get clear instead of holding station.
+  { key: 'sabotage', name: 'SABOTAGE', verb: 'Put charges on', basePay: 3200, risk: 4,
+    hostileTarget: true, needs: { winch: 1 },
+    blurb: 'Set the charges, then be somewhere else when they go.' },
+  { key: 'spotter', name: 'SPOTTER', verb: 'Mark the guns at', basePay: 2800, risk: 3,
+    hostileTarget: true,
+    blurb: 'Hold the designator from stand-off range. Somebody else does the shooting.' },
+  { key: 'search', name: 'SEARCH', verb: 'Find what went down near', basePay: 2400, risk: 2,
+    hostileTarget: false, needs: { winch: 1 },
+    blurb: 'A beacon and no coordinates. Fly the signal until it is under you.' },
+  { key: 'smuggling', name: 'QUIET RUN', verb: 'Run cargo unseen into', basePay: 3100, risk: 3,
+    hostileTarget: false,
+    blurb: 'The cargo is not the problem. Being on somebody\'s screen is the problem.' },
 ];
 export const contractKind = key => CONTRACT_KINDS.find(k => k.key === key);
+
+// Complications attach to any kind and are what stop the board from feeling like eight
+// templates. They are pure data: the mission layer reads them, so adding one does not add
+// a code path per contract kind.
+export const COMPLICATIONS = [
+  { key: 'weather', name: 'WEATHER CLOSING', pay: 1.18,
+    blurb: 'Visibility is going. Quill says take it or leave it.' },
+  { key: 'hot', name: 'SITE IS HOT', pay: 1.3,
+    blurb: 'They know somebody is coming. They do not know it is you.' },
+  { key: 'deadline', name: 'ON THE CLOCK', pay: 1.22, seconds: 300,
+    blurb: 'The client wants it inside five minutes or not at all.' },
+  { key: 'salvage', name: 'SALVAGE RIGHTS', pay: 0.88,
+    blurb: 'Lower fee, but anything you break on the way is yours.' },
+];
+export const complication = key => COMPLICATIONS.find(c => c.key === key);
+
+// Some work needs a fitting you may not have yet. A job you cannot physically fly should
+// never reach the board.
+export function canFly(profile, kind) {
+  for (const [id, need] of Object.entries(kind.needs ?? {})) {
+    if ((profile.heli[id] ?? profile.base[id] ?? 0) < need) return false;
+  }
+  return true;
+}
 
 function hash(n, seed) {
   let h = Math.imul(n ^ seed, 2246822519);
@@ -143,7 +183,9 @@ export function offersWork(profile, factionKey) {
 export function generateContracts(world, profile, { day = profile.day, count = null } = {}) {
   const slots = count ?? contractSlots(profile);
   const home = world.home;
-  const sites = world.settlementsNear(home.x, home.z, WORLD.half * 1.5)
+  // Landmarks are in the pool alongside the settlements: they are the places worth naming,
+  // so they should be the places worth flying to. They carry their own pay multiplier.
+  const sites = [...world.settlementsNear(home.x, home.z, WORLD.half * 1.5), ...(world.landmarks?.() ?? [])]
     .filter(site => Math.hypot(site.x - home.x, site.z - home.z) > 60);
   if (!sites.length) return [];
   const out = [];
@@ -158,6 +200,7 @@ export function generateContracts(world, profile, { day = profile.day, count = n
     // Nobody pays you to bomb their own town, and a faction you are close to will not be
     // offered up as a target either.
     const kinds = CONTRACT_KINDS.filter(kind => {
+      if (!canFly(profile, kind)) return false;
       if (!kind.hostileTarget) return true;
       if (targetFaction.key === issuer.key) return false;
       if (profile.standing[targetFaction.key] > 40) return false;
@@ -174,18 +217,23 @@ export function generateContracts(world, profile, { day = profile.day, count = n
     const standing = profile.standing[issuer.key];
     const risk = kind.risk + site.threat + (profile.standing[targetFaction.key] < -30 ? 1 : 0);
     const payMultiplier = crewMultiplier(profile, 'payMultiplier');
+    // One complication at most, on about a third of the board.
+    const twist = roll(6) < 0.34 ? COMPLICATIONS[Math.floor(roll(7) * COMPLICATIONS.length) % COMPLICATIONS.length] : null;
     const pay = Math.round((kind.basePay + distanceKm * 210 + risk * 320)
-      * (1 + standing / 260) * (0.9 + roll(4) * 0.35) * payMultiplier / 10) * 10;
+      * (1 + standing / 260) * (0.9 + roll(4) * 0.35) * payMultiplier
+      * (site.pay ?? 1) * (twist?.pay ?? 1) / 10) * 10;
 
     out.push({
       id, kind: kind.key, kindName: kind.name, issuer: issuer.key, issuerName: issuer.name,
       site: { id: site.id, name: site.name, x: site.x, z: site.z, kind: site.kind, kindName: site.kindName,
-        faction: site.faction, radius: site.radius, threat: site.threat, height: site.height },
+        faction: site.faction, radius: site.radius, threat: site.threat, height: site.height,
+        landmark: !!site.landmark, region: site.region, regionName: site.regionName },
       targetFaction: targetFaction.key,
       hostile: kind.hostileTarget,
-      distance, distanceKm: +distanceKm.toFixed(2), risk, pay,
+      distance, distanceKm: +distanceKm.toFixed(2), risk: risk + (twist ? 1 : 0), pay,
       title: `${kind.verb} ${site.name}`,
       brief: kind.blurb,
+      complication: twist ? { ...twist } : null,
       deltas: standingDeltas(issuer.key, targetFaction.key, kind),
       expiresDay: day + 2 + Math.floor(roll(5) * 3),
     });

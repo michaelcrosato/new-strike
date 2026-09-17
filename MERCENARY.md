@@ -4,17 +4,24 @@ An open-world successor to the BLOCKHAWK campaign. You start in a makeshift yard
 bottom-of-the-barrel helicopter and one colleague, and you fly whatever pays. The region is
 a hotspot; the work you take decides who talks to you and who shoots at you.
 
-This document covers what exists now: the world, the streamer, the outfit that turns the world
-into work, the combat that makes the region dangerous, and the eight kinds of job you fly.
+This document covers what exists now: the region and the nine distinct areas inside it, the
+streamer, the outfit that turns the world into work, the combat that makes it dangerous, and
+the twelve kinds of job you fly.
 
 ```powershell
-npm run world      # builds dist/world.html and serves it
-npm test           # 84 checks across five suites
+npm run world          # builds dist/world.html and serves it
+npm test               # 122 checks across seven suites
+npm run verify:world   # 13 browser checks against the built bundle (server must be running)
 ```
 
-Open **http://localhost:4189/dist/world.html**. `W A S D` fly, `SHIFT` throttle, `SPACE` fire, `E` winch or scan, `F` flares, `1 2 3` weapons,
-`B` the yard, `M` region map, `H` back to the yard, `G` hide the panels.
+Open **http://localhost:4189/dist/world.html**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
+`SPACE` fire, `E` winch, scan or mark, `F` flares, `1 2 3` weapons,
+`B` the yard, `M` region map, `H` back to the pad, `G` hide the panels.
 `?seed=12345` generates a different region.
+
+A first visit gets a briefing from Quill that describes the region that was actually
+generated — where you are parked, what the nearest landmark is, and what all nine areas are
+called. It happens once per seed.
 
 ## Scale
 
@@ -26,40 +33,104 @@ Nothing is stored. Every field is a pure function of `(seed, x, z)`, so the map 
 contract generator, the simulation and the mesh builder all ask the same questions and get
 the same answers, and only the part you can see is ever realised.
 
+## Nine distinct areas — `src/regions.js`
+
+The biome classifier works on purely local fields, so on its own the region came out as an
+even wash of the same terrain from corner to corner: you could fly ten kilometres and never
+feel you had gone anywhere. The region layer sits above the fields.
+
+Nine seats on a jittered three-by-three grid, each taking one of **nine archetypes**, shuffled
+by the seed so the names stay evocative and the layout changes completely from seed to seed:
+
+| area | character | area | character |
+| --- | --- | --- | --- |
+| THE GREEN DELTA | braided water, standing reed | THE BROKEN COAST | headlands and half-sunk islands |
+| THE LONG SAVANNA | grass and nowhere to hide | THE FEVER BASIN | canopy too thick for rivers |
+| THE ASH REACH | burnt rock cut into steps | THE SALT PANS | a dead white table |
+| THE PINE HIGHLANDS | cold ridges under black timber | THE KETTLE | worked ground, the most people |
+| THE WHITE SPINE | the roof of the region | | |
+
+Each archetype bends the fields underneath it through ten channels — how much land there is,
+how much relief, how tall it stands, how ridged, how wet, how warm, how many rivers, how
+much scatter, how settled, and how dangerous. Measured on the default seed, the areas hold
+9–13% of the map each and top out at very different heights:
+
+| area | share | peak | area | share | peak |
+| --- | --- | --- | --- | --- | --- |
+| THE WHITE SPINE | 12.5% | 147 m | THE FEVER BASIN | 13.1% | 61 m |
+| THE PINE HIGHLANDS | 11.0% | 104 m | THE BROKEN COAST | 9.3% | 44 m |
+| THE ASH REACH | 9.7% | 96 m | THE LONG SAVANNA | 10.5% | 35 m |
+| THE SALT PANS | 11.5% | 73 m | THE KETTLE | 10.2% | 33 m |
+| | | | THE GREEN DELTA | 12.3% | 25 m |
+
+Two properties are enforced rather than hoped for, and both are asserted:
+
+- **No seam.** Modifiers are a softmax over the seats by warped distance, sampled on a
+  25-unit lattice and interpolated, so they cross a border as a mixture over about 750 m.
+  The test walks a two-kilometre transect and fails if any channel jumps more than 0.05
+  between adjacent world units.
+- **No sliver, and no missing area.** Every archetype appears exactly once on every seed,
+  holds between 3.5% and 26% of the map, and only the four archetypes fit to hold a yard
+  are allowed the middle seat.
+
+The lattice is one flat `Float32Array` rather than a Map of small arrays: the terrain builder
+asks for modifiers on every vertex of every chunk, and four Map lookups plus an allocation
+per vertex measured three times the cost of the entire rest of the height field. A blend now
+costs **0.060 µs** and is clamped to a bounded lattice, so a query from a million units out
+reuses an edge node instead of growing anything.
+
+Because archetypes multiply height, `WORLD.ceiling` is a hard roof approached through a soft
+knee. Nothing the generator can produce exceeds it, whatever the seed, so an alpine spine
+tops out in a ridge rather than growing up through the camera.
+
+## One landmark per area — `src/landmarks.js`
+
+Terrain alone gives you nothing to point at. Each area holds exactly one structure, built for
+silhouette so you can tell which of the nine you are looking at from a kilometre out: the
+**drowned chapel** standing in the delta, the **grey dam** across a highland valley, **the ear**
+on the highest ground in the region, the **beached freighter** broken in two on the coast,
+**the steps** above the canopy, the **boneyard** of stripped fuselages, the **long strip** and its
+abandoned airliners, the **evaporators** and their white pans, and the **interchange** that
+stopped being built.
+
+Placement scores the ground each kind wants and takes the best candidate in the region rather
+than the first acceptable one, so a seed short of ideal ground still gets its landmark on the
+closest thing to it instead of quietly going without. Asserted on seven seeds: nine
+landmarks, one per area, inside the world, clear of settlements and the yard, each on ground
+its kind asks for — the chapel in water, the ear on the regional summit and overlooked from
+nowhere, the rest on dry buildable land.
+
+Landmarks are navigation anchors (they outrank a village in the HUD), map markers, and
+high-paying contract sites. The ones that were built cut a platform for themselves; the ones
+that ran aground do not.
+
 ## The world — `src/worldgen.js`
 
 Deterministic in the seed and nothing else. Gradient noise over a sixteen-entry gradient
-table (a sine per lattice corner cost four times as much), composed into fields:
+table, composed into fields: a **continental shape** framed by ocean so the water is a coast
+you can follow rather than a void you fall off; **elevation** from blended hills and ridged
+spines with rivers carved down the valleys; independent **moisture** and **temperature**;
+and **eight biomes** classified from those three.
 
-- **continent** — noise against an edge-distance frame, so land fills the region and the
-  water is a coast you can follow rather than a void you fall off
-- **elevation** — continental shape × blended hills and ridged mountain spines, with river
-  courses carved down the valleys of a ridged field
-- **moisture**, **temperature** — independent fields, temperature led by latitude with a
-  lapse rate for altitude
-- **eight biomes** classified from those three: open water, shoreline, delta wetland,
-  highland jungle, savanna, badlands, pine highland, alpine ridge
-
-The classifier's thresholds live in one `BANDS` table, tuned by coordinate descent against a
-measured sweep of the region rather than guessed. Current coverage, with 66% land:
+The classifier's thresholds live in one `BANDS` table, re-fitted by coordinate descent against
+a measured sweep of four seeds after the region layer moved the fields underneath it. Current
+coverage on the default seed, with 69% land, and every biome stays between 3.3% and 17.6%
+across six seeds:
 
 | biome | share | biome | share |
 | --- | --- | --- | --- |
-| open water | 32.4% | badlands | 8.2% |
-| shoreline | 4.7% | pine highland | 16.8% |
-| delta wetland | 9.5% | alpine ridge | 3.6% |
-| highland jungle | 10.3% | savanna | 14.6% |
+| open water | 31.0% | badlands | 7.7% |
+| shoreline | 3.4% | pine highland | 9.3% |
+| delta wetland | 12.9% | alpine ridge | 9.7% |
+| highland jungle | 13.0% | savanna | 13.1% |
 
-On top of the fields: **five factions** holding noise-warped territory around deterministic
-seats, **51 settlements** (about one per 2 km²) placed per cell where the ground allows and
-named, owned, sized and typed from the hash, and a **home yard** found by spiralling out from
-the centre for flat, dry, unclaimed ground clear of anyone else.
+On top of the fields: **five factions** holding noise-warped territory, **57 settlements** placed
+per cell where the ground allows and named, owned, sized and typed from the hash — with
+density and threat set by the region they stand in — and a **home yard** found by spiralling
+out from the centre for flat, dry, unclaimed ground clear of anyone else *and out of the
+watercourses*, which on the default seed had previously put the pad in a ditch.
 
-`groundHeight()` is the terrain as the helicopter and the mesh see it: raw elevation,
-flattened into a platform under each settlement so pads and buildings sit level. It is kept
-separate from `elevation()` because site selection asks for the raw terrain.
-
-A height sample costs 0.44 µs, which puts a full-detail chunk's heightfield at 0.48 ms.
+A height sample costs **0.606 µs**, which puts a full-detail chunk's height field at 0.66 ms.
 
 ## The streamer — `src/streaming.js`
 
@@ -76,11 +147,38 @@ what makes the invariants testable without a GPU:
 
 `buildChunk` in `src/terrain.js` turns a chunk into at most four meshes — ground, scatter,
 settlement, glazing — with colour in the vertices so a chunk shares one material per class.
-Chunk edges hang a skirt so a coarser neighbour cannot show daylight.
+Chunk edges hang a skirt so a coarser neighbour cannot show daylight. Landmarks build one
+detail level further out than settlements, because they are what you navigate by.
 
-Measured around the yard: **66 chunks, 105 meshes, 46,500 triangles held, 80 draw calls a
-frame**, 1.6 ms to build a chunk. After a 3 km transit: 141 built, 96 released, residency 66,
-leak zero.
+**Chunk building is 2.3× faster than before this work**, despite the region layer, true biome
+blending and the landmark meshes, because slope is now taken from the surface just built
+instead of four more field samples per vertex, and the derived fields are handed the height
+they would otherwise recompute:
+
+| | before | now |
+| --- | --- | --- |
+| bare terrain chunk | 3.75 ms | **1.60 ms** |
+| chunk with settlements | 5.45 ms | **2.71 ms** |
+| chunk with a landmark | — | **2.66 ms** |
+
+Measured around the yard: 66 chunks, 108 meshes, 47,000 triangles held, 51 draw calls a
+frame, 60 fps. After a ten-kilometre corner-to-corner transit: residency bounded, leak zero.
+
+## Colour and light
+
+Biome boundaries are now **truly blended**, not dithered. Each vertex classifies itself and
+four probes either side of it in the classifier's own units; deep inside a biome all five
+agree and the colour is exact, and within about fifteen metres of a threshold the colour is
+the mixture. Every biome's three ground colours are converted to linear once at load, which
+makes a real blend cheaper than the single hard lookup it replaced.
+
+The tone curve was chosen by measurement, not by eye. Sampling four places — the yard, the
+alpine ridge, the delta and the salt pans — AgX put 94% of the frame into two brightness
+buckets and averaged 0.41 saturation, which is exactly why every area looked like the same
+pale wash. Khronos PBR Neutral at exposure 1.6 holds the same mean brightness and peak,
+spreads the frame across four buckets, and carries **0.61 saturation — half again as much
+colour**. The salt pans now read as glare and the alpine ridge reads as darker than the
+savanna, instead of everything reading as haze.
 
 ## The outfit — `src/agency.js`
 
@@ -91,10 +189,11 @@ the contracts that come out of all of it.
   faction below −45 stops offering work entirely.
 - **a rivalry matrix** is the engine that stops you staying neutral: hitting someone earns
   credit with everyone who dislikes them and costs you with everyone who does not.
-- **contracts are generated from the world** — real settlements, their real owners, your real
-  standing. Eight kinds from survey and delivery up to strike and interdiction. Pay scales
-  with distance, risk and how much the client likes you. Nobody hires you to bomb their own
-  town, and a faction you are close to stops being offered as a target.
+- **contracts are generated from the world** — real settlements, real landmarks, their real
+  owners, your real standing. Pay scales with distance, risk, how much the client likes you,
+  and whether the site is somewhere worth naming. Nobody hires you to bomb their own town, a
+  faction you are close to stops being offered as a target, and work that needs a fitting you
+  have not bought never reaches the board at all.
 - **the board grows** with your radio mast and a fixer on the payroll.
 - **progression**: nine upgrades across the yard and the airframe, four hireable crew gated
   behind facilities, wages out of the tin at the end of each day, and a ledger.
@@ -112,19 +211,15 @@ flattened stays flat across a whole campaign.
 
 **Standing decides who shoots.** A faction that tolerates you leaves a rotor overhead alone;
 below −12 they engage if you linger; below −45 they fire on sight. Pulling the trigger on
-anyone provokes the neighbourhood for the rest of the sortie. Destroying a faction's hardware
-costs you standing with them immediately, which is the fastest way to make an enemy — and the
-whole point of the region.
+anyone provokes the neighbourhood for the rest of the sortie.
 
-The airframe carries what is fitted: the opening machine has a door gun and nothing else,
-and rockets and seekers arrive with pylons. Armour and fuel scale with plate and tanks. Fuel
-burns while you fly and tops up over your own pad, along with armour and ammunition, at a
-rate set by your bowser and workshop. Run dry or lose the armour and the aircraft is lost:
-the job fails, it costs you, and you wake up in the yard with it rebuilt.
+The airframe carries what is fitted: the opening machine has a door gun and nothing else, and
+rockets and seekers arrive with pylons. Fuel burns while you fly and tops up over your own
+pad, along with armour and ammunition. Run dry or lose the armour and the aircraft is lost.
 
-## Missions — `src/missions.js`
+## Twelve kinds of work — `src/missions.js`
 
-All eight contract kinds are flyable, and each can fail:
+All twelve are flyable and every one can fail:
 
 | kind | what you do | how it goes wrong |
 | --- | --- | --- |
@@ -136,29 +231,73 @@ All eight contract kinds are flyable, and each can fail:
 | escort | keep a slow column alive to its destination | an uncovered column burns |
 | strike | flatten the garrison at the site | — |
 | interdiction | stop a vehicle before it reaches the border | it gets away |
+| sabotage | set two charges, then be clear when they blow | shooting what you came to mine; being inside the blast |
+| spotter | hold a designator from stand-off range | closing on the guns gets you seen |
+| search | fly a signal to a beacon with no marker | the battery dies before you find it |
+| quiet run | route cargo in without crossing a sensor | being painted with the cargo aboard |
 
-Strike and interdiction push their targets straight into the combat hostile list, so there is
-one damage model rather than two, and mission targets are cleaned out when the job ends.
+The last four each invert a habit the first eight teach — stand off instead of closing,
+navigate on an instrument instead of a marker, route around instead of through, and get clear
+instead of holding station. Strike, interdiction, sabotage and spotter push their targets
+straight into the combat hostile list, so there is one damage model rather than two, and
+mission targets are cleaned out when the job ends.
+
+**Complications** attach to any kind, on about a third of the board, and are pure data the
+mission layer reads — so a new one is not another code path per kind:
+
+| complication | what it does |
+| --- | --- |
+| WEATHER CLOSING | the visibility closes in and lifts again with the contract |
+| SITE IS HOT | two more guns than the brief mentioned |
+| ON THE CLOCK | a deadline that can end any job |
+| SALVAGE RIGHTS | a lower fee, but anything you break on the way pays double |
 
 ## The yard
 
 Press `B`. Nine fittings across the base and the airframe, each with its level, its
 description and its price; four hireable crew gated behind the facilities they need. Buying a
 fitting rearms the aircraft on the spot. Progress saves to local storage per seed, and a save
-from an older build still boots because it is merged over a fresh profile rather than replacing it.
+from an older build still boots because it is merged over a fresh profile rather than
+replacing it. With any panel open the aircraft holds station instead of drifting away while
+you read.
+
+## Sound and the winch
+
+Sound is the campaign's synthesised engine, so the open world costs no assets: a filtered
+noise rotor with a beat under it that tracks your speed, and short cues for firing, hits,
+explosions, incoming missiles, flares, radio and every mission event. It starts on the first
+key or click, because no browser will open an audio context without a gesture.
+
+The winch is fitted to the open-world airframe: five of the twelve kinds are things you lower
+a hook for, and the cable pays out to just above whatever is underneath you, sways while it
+hangs, and winds back in when you let go.
 
 ## What is wired and what is not
 
-Wired: the region, the streamer, chunk meshing, flight, the region map, combat with streamed
-garrisons, standing-driven hostility, all eight contract kinds with their failure states, the
-contract board, payment, the day rolling over, the yard with upgrades and hiring, saving, and
-the telemetry that shows all of it.
+Wired: the region and its nine distinct areas, the nine landmarks, the streamer, chunk
+meshing with blended biomes, flight, the region map with region names and landmark markers,
+combat with streamed garrisons, standing-driven hostility, all twelve contract kinds with
+their failure states, four complications, the contract board, payment, the day rolling over,
+the yard with upgrades and hiring, saving, the first-run briefing, sound, the winch, and the
+telemetry that shows all of it.
 
-Not yet: a proper first-run introduction, sound, the campaign's rescue-winch animation on the
-open-world airframe, and mission variety beyond the eight kinds. Biome boundaries are now
-dithered per vertex rather than drawn as a hard line, but they are interleaved rather than
-truly blended.
+Not yet: no interiors or ground-level detail (the camera never gets close enough to need
+them), no weather beyond the one complication, no day/night cycle, and no persistent
+consequences for a faction beyond its standing number — a faction you have ruined does not
+yet visibly lose ground on the map.
 
-The BLOCKHAWK campaign is untouched and still builds, tests and deploys; see `README.md`.
+## Verification
 
-The BLOCKHAWK campaign is untouched and still builds, tests and deploys; see README.md.
+- **122 module checks** across seven suites: the campaign parity harness, the campaign
+  levels, the world and streamer, the outfit, combat and the first eight kinds, the region
+  layer and its landmarks, and the newer four kinds with their complications.
+- **13 browser checks** (`npm run verify:world`) against the built single file: it boots and
+  renders, the briefing describes the generated region, real keyboard input flies the
+  aircraft, nine regions and nine landmarks exist and the readout changes as you cross them,
+  every landmark streams in without error, the map and yard open on real keys, all twelve
+  kinds reach the board, a real key press pays the winch cable out, a contract can be flown
+  for money, progress saves and survives a reload, weather closes in and lifts, a
+  ten-kilometre transit stays bounded, and there are no external requests or script errors.
+
+The BLOCKHAWK campaign is untouched: it still builds to the byte (`dist/blockhawk.html`
+hashes to the value pinned in `QA.md`) and its 19 browser checks still pass. See `README.md`.

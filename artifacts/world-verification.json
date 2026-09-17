@@ -1,0 +1,126 @@
+{
+  "checks": [
+    "The built bundle boots, streams the first chunks and renders",
+    "The first-run briefing describes the region that was actually generated",
+    "Real keyboard input flies the aircraft in the rendered world",
+    "Nine regions with nine landmarks, and the readout changes as you cross them",
+    "Every one of the nine landmarks streams in and builds without error",
+    "The region map and the yard open, draw and close on real key presses",
+    "All twelve kinds of work reach the board and brief the pilot",
+    "Holding the winch key lowers a visible cable and hook, and releasing raises it",
+    "A contract can be flown to completion for money on the built bundle",
+    "Progress saves per seed, survives a reload, and the briefing only happens once",
+    "The weather complication closes the visibility in and lifts again",
+    "Flying the full ten kilometres keeps residency bounded and releases what it builds",
+    "No external asset requests and no JavaScript or shader errors"
+  ],
+  "errors": [],
+  "network": [],
+  "measurements": {
+    "boot": {
+      "seed": 20492,
+      "position": {
+        "x": 12,
+        "z": -23,
+        "y": 26.75468429132233
+      },
+      "sample": {
+        "x": 12,
+        "z": -23,
+        "height": 12.75468429132233,
+        "moisture": 0.497351777786349,
+        "temperature": 0.6896404491716607,
+        "biome": 4,
+        "biomeKey": "savanna",
+        "faction": 0,
+        "river": 0,
+        "slope": 0.14284051969438116,
+        "region": "savanna",
+        "regionName": "THE LONG SAVANNA",
+        "regionIndex": 4
+      },
+      "resident": 66,
+      "pending": 0,
+      "meshes": 108,
+      "triangles": 47224,
+      "draw": 86,
+      "drawn": 43341,
+      "fps": 60,
+      "streamMs": 0.05,
+      "stats": {
+        "built": 66,
+        "disposed": 0,
+        "rebuiltForLod": 0,
+        "queued": 0,
+        "peakResident": 66
+      },
+      "region": "savanna",
+      "regionNodes": 4508,
+      "fog": 0.00085,
+      "cable": 0,
+      "intro": true
+    },
+    "regions": [
+      "basin",
+      "saltflat",
+      "highland",
+      "delta",
+      "savanna",
+      "alpine",
+      "badlands",
+      "coast",
+      "jungle"
+    ],
+    "briefs": {
+      "survey": "HOLD THE SCAN OVER THE SITE",
+      "delivery": "SET THE CRATE DOWN ON SITE",
+      "extraction": "WINCH THE SURVIVORS · 0/3",
+      "salvage": "WINCH THE WRECK",
+      "patrol": "FLY THE WAYPOINTS · 0/4",
+      "escort": "KEEP THE COLUMN ALIVE · 100%",
+      "strike": "FLATTEN THE SITE · 0/3",
+      "interdiction": "STOP THE RUNNER · 2 LEGS LEFT",
+      "sabotage": "SET THE CHARGES · 0/2",
+      "spotter": "HOLD THE DESIGNATOR FROM 210 M OUT · 0/3",
+      "search": "FLY THE SIGNAL · 260 S OF BATTERY",
+      "smuggling": "RUN IT IN UNSEEN"
+    },
+    "winch": {
+      "paidOut": 1.8071952163464318
+    },
+    "job": {
+      "cash": 5000,
+      "day": 1,
+      "midway": "WRECK ABOARD · RETURN TO THE YARD",
+      "after": 9860,
+      "dayAfter": 2,
+      "completed": 1,
+      "active": null
+    },
+    "weather": {
+      "clear": 0.00085,
+      "closed": 0.00261,
+      "lifted": 0.00086
+    },
+    "transit": {
+      "start": {
+        "built": 101,
+        "disposed": 66,
+        "rebuiltForLod": 0,
+        "queued": 1,
+        "peakResident": 66
+      },
+      "end": {
+        "built": 646,
+        "disposed": 611,
+        "rebuiltForLod": 388,
+        "queued": 0,
+        "peakResident": 69
+      },
+      "peak": 69,
+      "worst": 0.01,
+      "resident": 35,
+      "nodes": 6190
+    }
+  }
+}

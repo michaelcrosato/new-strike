@@ -7,6 +7,9 @@
 //
 // One world unit is five metres, so the region is 2000 x 2000 units = 10 x 10 km = 100 km².
 
+import { createRegions, MOD } from './regions.js';
+import { placeLandmarks } from './landmarks.js';
+
 export const WORLD = {
   size: 2000,            // units across, centred on the origin
   half: 1000,
@@ -16,6 +19,11 @@ export const WORLD = {
   cell: 170,             // settlement cell, 850 m
   seaLevel: 0,
   maxElevation: 130,
+  // A hard roof, approached smoothly. Region archetypes multiply height, and the camera
+  // sits 142 units above the aircraft: without this an alpine spine on a generous seed
+  // would grow up through the near plane. Nothing the generator can do exceeds this.
+  ceiling: 162,
+  ceilingKnee: 0.68,
 };
 
 // ---------------------------------------------------------------- noise
@@ -81,6 +89,16 @@ const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const smoothstep = (a, b, t) => { const k = clamp((t - a) / (b - a), 0, 1); return k * k * (3 - 2 * k); };
 const lerp = (a, b, t) => a + (b - a) * t;
 
+// The soft roof. Below the knee nothing happens at all; above it the curve bends over and
+// approaches WORLD.ceiling without ever reaching it, so a mountain region tops out in a
+// ridge rather than a mesa of clipped triangles.
+const KNEE = WORLD.ceiling * WORLD.ceilingKnee;
+function softCap(h) {
+  if (h <= KNEE) return h;
+  const room = WORLD.ceiling - KNEE;
+  return KNEE + room * (1 - Math.exp(-(h - KNEE) / room));
+}
+
 // ---------------------------------------------------------------- biomes
 export const BIOMES = [
   { id: 0, key: 'ocean', name: 'OPEN WATER', water: true,
@@ -116,20 +134,20 @@ export const biome = id => BIOMES[id];
 export const SHAPE = {
   landBias: 0.42,        // higher pushes the coastline inland
   landGain: 2.3,
-  reliefBase: 0.22,
-  reliefGain: 0.86,
-  elevationCurve: 0.7,   // lower lifts the middle of the continent
+  reliefBase: 0.268,
+  reliefGain: 0.869,
+  elevationCurve: 0.615, // lower lifts the middle of the continent
 };
 
 export const BANDS = {
-  shoreHeight: 3.4,
-  wetMoisture: 0.72,
-  lowlandHeight: 12,
-  highlandHeight: 40,
-  alpineHeight: 68,
-  coldTemperature: 0.34,
-  aridMoisture: 0.46,
-  humidMoisture: 0.6,
+  shoreHeight: 3.82,
+  wetMoisture: 0.772,
+  lowlandHeight: 12.6,
+  highlandHeight: 45,
+  alpineHeight: 72.8,
+  coldTemperature: 0.392,
+  aridMoisture: 0.48,
+  humidMoisture: 0.652,
 };
 
 // ---------------------------------------------------------------- factions
@@ -165,6 +183,11 @@ const NAME_TAIL = ['DELTA', 'CROSS', 'REACH', 'LANDING', 'STATION', 'BASIN', 'FL
 // ---------------------------------------------------------------- the world
 export function createWorld(seed = 20492) {
   const s = seed | 0;
+  // The macro-region layer. Everything below reads its blended modifiers, which is what
+  // turns one even wash of noise into nine areas that fly differently. The noise
+  // primitives are injected so regions.js never has to import this file back.
+  const regions = createRegions({ seed: s, size: WORLD.size, half: WORLD.half, fbm, hash: hash2 });
+
   // Faction seats, spread deterministically around the region. Territory is the nearest
   // seat, warped by noise so borders are ragged rather than geometric.
   const seats = FACTIONS.map((f, i) => {
@@ -185,46 +208,61 @@ export function createWorld(seed = 20492) {
     const edge = Math.min(WORLD.half - Math.abs(x), WORLD.half - Math.abs(z)) / WORLD.half;
     const frame = smoothstep(0.015, 0.20, edge);
     const bays = fbm(nx * 7.9 - 33, nz * 7.9 + 48, s + 37, 3, 1, 2.05, 0.5) * 0.14;
-    return clamp((base + lobes + bays - SHAPE.landBias) * SHAPE.landGain * frame, -1, 1);
+    // The land channel goes inside the frame, so a coastal archetype eats into the
+    // shoreline while the outer ring of ocean stays ocean whatever the region wants.
+    const land = regions.modifiersAt(x, z)[MOD.land];
+    return clamp((base + lobes + bays + land - SHAPE.landBias) * SHAPE.landGain * frame, -1, 1);
   }
 
   function mountainMask(x, z) {
     const nx = x / WORLD.size, nz = z / WORLD.size;
-    return smoothstep(0.34, 0.78, fbm(nx * 3.3 + 40, nz * 3.3 - 25, s + 53, 3, 1, 2.0, 0.55) * 0.5 + 0.5);
+    const ridge = regions.modifiersAt(x, z)[MOD.ridge];
+    return smoothstep(0.34, 0.78, fbm(nx * 3.3 + 40, nz * 3.3 - 25, s + 53, 3, 1, 2.0, 0.55) * 0.5 + 0.5 + ridge);
   }
 
   // River courses: the thin valleys of a ridged field, only where there is land to drain.
   function riverStrength(x, z) {
     const nx = x / WORLD.size, nz = z / WORLD.size;
+    const flow = regions.modifiersAt(x, z)[MOD.river];
     const r = ridged(nx * 5.4, nz * 5.4, s + 71, 3, 1);
-    return smoothstep(0.86, 0.995, r);
+    return clamp(smoothstep(0.86, 0.995, r) * flow, 0, 1);
   }
 
   function elevation(x, z) {
     const c = continent(x, z);
     if (c <= 0) return c * 26;                       // sea floor, shelves down off the coast
+    // Read the two height channels out as numbers before anything else samples the field:
+    // the modifier buffer is shared, and holding a reference across calls is a trap.
+    const mod = regions.modifiersAt(x, z);
+    const reliefScale = mod[MOD.relief], lift = mod[MOD.lift];
     const nx = x / WORLD.size, nz = z / WORLD.size;
     const hills = (fbm(nx * 9.5, nz * 9.5, s + 97, 4, 1, 2.05, 0.5) * 0.5 + 0.5);
     const ridges = ridged(nx * 7.2, nz * 7.2, s + 131, 4, 1);
     const relief = lerp(hills * 0.55, ridges, mountainMask(x, z));
-    let h = Math.pow(c, SHAPE.elevationCurve) * WORLD.maxElevation * (SHAPE.reliefBase + relief * SHAPE.reliefGain);
+    let h = Math.pow(c, SHAPE.elevationCurve) * WORLD.maxElevation * lift
+      * (SHAPE.reliefBase + relief * SHAPE.reliefGain * reliefScale);
     const river = riverStrength(x, z);
     if (river > 0) h = lerp(h, Math.min(h, 1.4), river * 0.92);   // carve the valley
-    return h;
+    return softCap(h);
   }
 
-  function moisture(x, z) {
+  // Both derived fields take the height as an optional argument. The terrain builder
+  // already knows it for every vertex it is about to write, and recomputing elevation
+  // underneath moisture and temperature was two thirds of the cost of meshing a chunk.
+  function moisture(x, z, height = elevation(x, z)) {
     const nx = x / WORLD.size, nz = z / WORLD.size;
+    const wet = regions.modifiersAt(x, z)[MOD.moisture];
     const base = fbm(nx * 6.3 - 12, nz * 6.3 + 31, s + 149, 4, 1, 2.04, 0.5) * 0.5 + 0.5;
-    const coastal = smoothstep(46, 2, elevation(x, z)) * 0.24;    // wetter near the water
-    return clamp(base * 0.86 + coastal + riverStrength(x, z) * 0.22, 0, 1);
+    const coastal = smoothstep(46, 2, height) * 0.24;             // wetter near the water
+    return clamp(base * 0.86 + coastal + riverStrength(x, z) * 0.22 + wet, 0, 1);
   }
 
-  function temperature(x, z) {
+  function temperature(x, z, height = elevation(x, z)) {
+    const warmth = regions.modifiersAt(x, z)[MOD.temperature];
     const latitude = 1 - smoothstep(-WORLD.half, WORLD.half, z);  // north is cooler
     const noise = fbm(x / WORLD.size * 4.1 + 60, z / WORLD.size * 4.1, s + 181, 3, 1, 2.02, 0.5) * 0.14;
-    const lapse = clamp(elevation(x, z), 0, WORLD.maxElevation) / WORLD.maxElevation * 0.40;
-    return clamp(latitude * 0.60 + 0.34 + noise - lapse, 0, 1);
+    const lapse = clamp(height, 0, WORLD.maxElevation) / WORLD.maxElevation * 0.40;
+    return clamp(latitude * 0.60 + 0.34 + noise - lapse + warmth, 0, 1);
   }
 
   function classify(h, m, t) {
@@ -263,8 +301,10 @@ export function createWorld(seed = 20492) {
   function sample(x, z) {
     const h = elevation(x, z), m = moisture(x, z), t = temperature(x, z);
     const id = classify(h, m, t);
+    const region = regions.regionAt(x, z);
     return { x, z, height: h, moisture: m, temperature: t, biome: id, biomeKey: BIOMES[id].key,
-      faction: factionAt(x, z), river: riverStrength(x, z), slope: slope(x, z) };
+      faction: factionAt(x, z), river: riverStrength(x, z), slope: slope(x, z),
+      region: region.key, regionName: region.name, regionIndex: region.index };
   }
 
   // --- settlements ---------------------------------------------------------
@@ -276,7 +316,11 @@ export function createWorld(seed = 20492) {
     if (settlementCache.has(key)) return settlementCache.get(key);
     let result = null;
     const roll = hash2(cellX, cellZ, s + 401);
-    if (roll < 0.74) {
+    const centre = regions.modifiersAt((cellX + 0.5) * WORLD.cell, (cellZ + 0.5) * WORLD.cell);
+    // How settled the area is, is the region's business: the Kettle is worked ground and
+    // the White Spine is not.
+    const density = centre[MOD.settle], threatBias = centre[MOD.threat];
+    if (roll < 0.74 * density) {
       const x = (cellX + 0.18 + hash2(cellX, cellZ, s + 409) * 0.64) * WORLD.cell;
       const z = (cellZ + 0.18 + hash2(cellX, cellZ, s + 419) * 0.64) * WORLD.cell;
       if (Math.abs(x) < WORLD.half - 40 && Math.abs(z) < WORLD.half - 40) {
@@ -293,12 +337,15 @@ export function createWorld(seed = 20492) {
           const head = NAME_HEAD[Math.floor(nameRoll * NAME_HEAD.length) % NAME_HEAD.length];
           const tail = NAME_TAIL[Math.floor(hash2(cellX, cellZ, s + 457) * NAME_TAIL.length) % NAME_TAIL.length];
           const sizeRoll = hash2(cellX, cellZ, s + 463);
+          const region = regions.regionAt(x, z);
           result = {
             id: `s${cellX}_${cellZ}`, cellX, cellZ, x, z,
-            kind: kind.key, kindName: kind.name, pads: kind.pads, threat: kind.threat,
+            kind: kind.key, kindName: kind.name, pads: kind.pads,
+            threat: clamp(kind.threat + Math.round(threatBias), 0, 4),
             radius: Math.round(lerp(kind.size[0], kind.size[1], sizeRoll)),
             name: `${head} ${tail}`, biome: b, faction: factionAt(x, z),
             height: h, coastal,
+            region: region.key, regionName: region.name, regionIndex: region.index,
           };
         }
       }
@@ -328,19 +375,50 @@ export function createWorld(seed = 20492) {
     return out;
   }
 
+  // --- landmarks -----------------------------------------------------------
+  // One signature structure per region, placed lazily because placement asks the world
+  // about itself. The guard matters: placement consults settlements and the home site, and
+  // a re-entrant call must see an empty list rather than recurse forever.
+  let landmarkList = null, placing = false;
+  function landmarks() {
+    if (landmarkList) return landmarkList;
+    if (placing) return [];
+    placing = true;
+    try { landmarkList = placeLandmarks(api); } finally { placing = false; }
+    return landmarkList;
+  }
+  function landmarksNear(x, z, radius) {
+    return landmarks().filter(l => Math.hypot(l.x - x, l.z - z) <= radius);
+  }
+  // Everything that cuts a level platform into the hillside: settlements, plus the
+  // landmarks that were built rather than run aground. The mesh, the props and the flight
+  // model all have to agree on this, so they all ask for the same list.
+  function platformsNear(x, z, radius) {
+    const sites = settlementsNear(x, z, radius);
+    for (const mark of landmarks()) {
+      if (!mark.flatten) continue;
+      if (Math.hypot(mark.x - x, mark.z - z) <= radius) sites.push(mark);
+    }
+    return sites;
+  }
+
   // Ground as the helicopter and the mesh see it: raw terrain, flattened into a platform
   // under each settlement so pads and buildings sit level. Kept separate from elevation()
   // because site selection itself asks for the raw terrain.
-  function groundHeight(x, z, sites) {
-    const base = elevation(x, z);
-    const near = sites ?? settlementsNear(x, z, 70);
+  function groundHeight(x, z, sites, raw = elevation(x, z)) {
+    const base = raw;
+    const near = sites ?? platformsNear(x, z, 90);
     if (!near.length) return base;
     let h = base;
     for (const site of near) {
       const d = Math.hypot(x - site.x, z - site.z);
-      const outer = site.radius * 1.7;
+      // A landmark needs a wider skirt than a village: a two-kilometre runway and a grid
+      // of salt pans are long things, and with a settlement's radius they hung off the
+      // edge of their own platform onto sloping ground.
+      const inner = site.radius * (site.landmark ? 1.3 : 0.7);
+      const outer = site.radius * (site.landmark ? 2.2 : 1.7);
       if (d > outer) continue;
-      h = lerp(h, site.height, 1 - smoothstep(site.radius * 0.7, outer, d));
+      h = lerp(h, site.height, 1 - smoothstep(inner, outer, d));
     }
     return h;
   }
@@ -357,6 +435,10 @@ export function createWorld(seed = 20492) {
         const h = elevation(x, z);
         if (h < 4 || h > 40) continue;
         if (slope(x, z, 4) > 0.16) continue;
+        // Not in a watercourse. The river field carves valleys down to almost nothing, and
+        // without this the yard could be — and on the default seed was — a pad in a ditch
+        // with steep sides all around it.
+        if (riverStrength(x, z) > 0.3) continue;
         const b = biomeAt(x, z);
         if (b === 0 || b === 7) continue;
         if (settlementsNear(x, z, 120).length) continue;
@@ -383,7 +465,8 @@ export function createWorld(seed = 20492) {
       const b = classify(h, moisture(x, z), temperature(x, z));
       const info = BIOMES[b];
       if (!info.props.length) continue;
-      if (hash2(cx * 17 + i, cz * 23, s + 521) > info.scatter) continue;
+      const density = regions.modifiersAt(x, z)[MOD.scatter];
+      if (hash2(cx * 17 + i, cz * 23, s + 521) > info.scatter * density) continue;
       if (slope(x, z) > 0.55) continue;
       const kindRoll = hash2(cx + i, cz * 7 + i, s + 541);
       out.push({
@@ -396,13 +479,16 @@ export function createWorld(seed = 20492) {
     return out;
   }
 
-  return {
+  const api = {
     seed: s, seats,
     elevation, height: elevation, groundHeight, moisture, temperature, biomeAt, factionAt, slope, sample,
     continent, riverStrength, classify,
     settlementInCell, settlementsNear, allSettlements, propsInChunk,
+    regions, regionAt: regions.regionAt, regionMod: regions.modifiersAt,
+    landmarks, landmarksNear, platformsNear,
     get home() { return home ?? (home = findHomeSite()); },
   };
+  return api;
 }
 
 // Chunk helpers, shared by the streamer and the tests.

@@ -123,11 +123,12 @@ export class EntityView {
     return this.flagMaterials.get(factionId);
   }
 
-  // `entities` is any array of { id, type|kind, x, y, z, yaw, dead }.
+  // `entities` is any array of { id, type|kind, x, y, z, yaw, dead }. `hidden` keeps a
+  // search beacon off the screen until you are close enough to have spotted it.
   sync(entities) {
     const seen = new Set();
     for (const entity of entities) {
-      if (entity.dead || entity.aboard) continue;
+      if (entity.dead || entity.aboard || entity.hidden) continue;
       const kind = entity.type ?? entity.kind;
       const template = this.templates[kind];
       if (!template) continue;

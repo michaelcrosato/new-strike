@@ -45,9 +45,13 @@ Importing the repository in the Vercel dashboard needs no extra configuration; `
 ## What is next: MERCENARY STRIKE
 
 An open-world successor is being built alongside this campaign: a single streamed 100 km²
-region, eight biomes, five factions, and a mercenary outfit you build from a makeshift yard.
-The world generator, chunk streamer and contract backend are in and tested — see
-[MERCENARY.md](MERCENARY.md) and run `npm run world`. The campaign below is untouched.
+region divided into **nine distinct named areas**, each with its own terrain character and one
+unmistakable landmark, holding eight biomes, five factions, twelve kinds of contract and a
+mercenary outfit you build from a makeshift yard. The generator, chunk streamer, region
+layer, combat and contract backend are in and tested — 122 module checks and 13 browser
+checks. See [MERCENARY.md](MERCENARY.md) and run `npm run world`.
+
+The campaign below is untouched: it still builds to the byte and its 19 browser checks pass.
 
 ## The campaign
 
