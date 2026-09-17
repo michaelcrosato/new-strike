@@ -4,7 +4,7 @@ An original, playable helicopter combat vertical slice inspired by the overhead 
 
 ## Play
 
-Open **[dist/blockhawk.html](dist/blockhawk.html)** in Chrome, Edge, Firefox or Samsung Internet with WebGL 2 enabled. This is the complete game: rendering library, models, water, particles, fonts, interface, audio and license notices are embedded. It makes no external requests and works offline. `index.html` and `dist/index.html` are identical copies for convenient serving.
+Play it now at **[new-strike.vercel.app](https://new-strike.vercel.app)**, or open **[dist/blockhawk.html](dist/blockhawk.html)** in Chrome, Edge, Firefox or Samsung Internet with WebGL 2 enabled. This is the complete game: rendering library, models, water, particles, fonts, interface, audio and license notices are embedded. It makes no external requests and works offline. `index.html` and `dist/index.html` are identical copies for convenient serving.
 
 For a local server:
 
@@ -24,7 +24,7 @@ The build output is a plain static directory, so any static host works. This rep
 vercel --prod
 ```
 
-Importing the repository in the Vercel dashboard needs no extra configuration; `vercel.json` supplies it.
+Importing the repository in the Vercel dashboard needs no extra configuration; `vercel.json` supplies it. The GitHub repository is connected to the Vercel project, so pushes to `main` deploy to **https://new-strike.vercel.app** automatically.
 
 ## Controls
 

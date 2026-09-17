@@ -8,3 +8,5 @@ artifacts/*
 # The single-file build outputs are this project's deliverable, so they are
 # tracked even though ~/.gitignore_global excludes dist/.
 !dist/
+
+.vercel
