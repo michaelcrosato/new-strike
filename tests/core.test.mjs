@@ -47,7 +47,7 @@ test('countermeasures only remove nearby homing threats, and have a cooldown',()
 });
 test('fuel exhaustion, enemy damage, and missile launch all produce real failure states',()=>{
   const fuel=started();fuel.p.fuel=.001;tick(fuel,{},1);assert.equal(fuel.phase,'failed');assert.equal(fuel.endTitle,'FUEL EXHAUSTED');
-  const timeout=started();timeout.stage=2;timeout.launchTimer=.01;tick(timeout,{},1);assert.equal(timeout.phase,'failed');assert.equal(timeout.endTitle,'LAUNCH NOT PREVENTED');
+  const timeout=started();timeout.stage=2;timeout.objectiveTimer=.01;tick(timeout,{},1);assert.equal(timeout.phase,'failed');assert.equal(timeout.endTitle,'LAUNCH NOT PREVENTED');
   const damage=started();damage.p.invulnerable=0;damage.p.armor=1;damage.projectiles.push({id:1,x:BASE.x,z:BASE.z,y:8,life:2,enemy:true,damage:20,vx:0,vz:0,vy:0,travelled:0});tick(damage,{},.1);assert.equal(damage.phase,'failed');assert.equal(damage.endTitle,'AIRCRAFT LOST');
 });
 test('full operation is winnable with normal weapons, rescues, supplies and extraction',()=>{

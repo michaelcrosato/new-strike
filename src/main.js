@@ -7,9 +7,9 @@ import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { World, ISLANDS } from './world.js';
+import { World } from './world.js';
 import { AudioEngine } from './audio.js';
-import { createGame, startGame, update, objective, contextAction, WEAPONS, BASE, DEPOT, CAMP, clamp, distance } from './core.js';
+import { createGame, startGame, update, objective, contextAction, WEAPONS, LEVELS, clamp, distance } from './core.js';
 
 const $ = id => document.getElementById(id);
 const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints>0;
@@ -20,7 +20,12 @@ const save = {get(key,fallback){try{return JSON.parse(localStorage.getItem('bloc
 const audio=new AudioEngine();audio.enabled=save.get('audio',true);audio.volume=save.get('volume',.65);
 $('audio-label').textContent=audio.enabled?'SOUND ON':'SOUND OFF';$('audio-button').setAttribute('aria-label',audio.enabled?'Mute sound':'Enable sound');$('volume').value=audio.volume*100;
 $('difficulty').value=save.get('difficulty','pilot');
-let game=createGame($('difficulty').value);
+const campaign={
+  get unlocked(){return clamp(save.get('unlocked',1),1,LEVELS.length);},
+  set unlocked(v){save.set('unlocked',clamp(v,1,LEVELS.length));},
+};
+let operation=clamp(save.get('operation',0),0,campaign.unlocked-1);
+let game=createGame($('difficulty').value,operation);
 let renderer,scene,camera,world,composer,gtao,bloom,dof,film,sun,renderPass;
 let graphics=save.get('quality','auto'),resolvedQuality='balanced';$('quality').value=graphics;
 let width=innerWidth,height=innerHeight,clockTime=0,lastTime=0,shake=0,damageFlash=0,toastTime=0,uiTick=0;
@@ -28,7 +33,7 @@ let pausedFrom='playing',manualFrom='briefing',initialReady=false,resizePending=
 let actualFps=60,frameAverage=16.6,performanceTime=0,autoDownshifted=false;
 const keys=new Set();const input={x:0,z:0,fire:false,interact:false,flare:false,turn:0,strafe:false,aim:null};
 let mouseFire=false,mouseAim=null,lastMouse=0,joy={x:0,y:0,id:null},touchFire=false,touchInteract=false,touchFlare=false,flareQueued=false,fireQueued=false;
-const cameraFocus=new THREE.Vector3(BASE.x,0,BASE.z),cameraOffset=new THREE.Vector3(74,91,90);
+const cameraFocus=new THREE.Vector3(game.base.x,0,game.base.z),cameraOffset=new THREE.Vector3(74,91,90);
 const screenRight=new THREE.Vector3(.772,0,-.635),screenUp=new THREE.Vector3(-.635,0,-.772);
 const raycaster=new THREE.Raycaster(),ground=new THREE.Plane(new THREE.Vector3(0,1,0),-3),tempVec=new THREE.Vector3();
 const projected=new THREE.Vector3();
@@ -70,7 +75,7 @@ function initGraphics() {
     void main(){vec3 col=texture2D(tDiffuse,vUv).rgb;vec2 p=vUv*2.-1.;float vignette=1.-dot(p,p)*.095;
     float grain=fract(sin(dot(vUv,vec2(12.9898,78.233))+uTime)*43758.5453)-.5;
     col*=vignette;col+=grain*uGrain;col=mix(vec3(dot(col,vec3(.2126,.7152,.0722))),col,1.16);col=(col-.5)*1.045+.5;gl_FragColor=vec4(col,1.);}`});composer.addPass(film);
-  setQuality(graphics);resize();updateCamera(1,true);
+  setQuality(graphics);describeOperation();resize();updateCamera(1,true);
   renderer.compile(scene,camera);composer.render();
   initialReady=true;$('loading').hidden=true;setPhase('briefing');
   requestAnimationFrame(frame);
@@ -116,12 +121,38 @@ function updateCamera(dt,snap=false) {
   sun.position.set(sx-80,130,sz+70);sun.target.position.set(sx,0,sz);sun.target.updateMatrixWorld();
 }
 
+// Populates the briefing, the checklists and the map heading for one operation.
+function describeOperation() {
+  const level=LEVELS[operation],count=level.objectives.length;
+  $('brief-tagline').textContent=level.tagline;
+  $('operation-title').innerHTML=`<span>OP. ${String(operation+1).padStart(2,'0')}</span> ${level.region}`;
+  $('brief-intro').innerHTML=level.intro.join('<br>');
+  $('deploy-button').innerHTML=`DEPLOY TO ${level.name.split(' ').pop()} <span>↗</span>`;
+  $('brief-objectives').textContent=`${count} OBJECTIVES`;
+  $('map-title').textContent=level.name+'.';
+  $('top-location').textContent=level.name;
+  $('mission-steps').innerHTML=level.objectives.map((_,i)=>`<i${i===0?' class="active"':''}></i>`).join('');
+  $('map-objectives').innerHTML=level.objectives.map(o=>`<li>${o.label.charAt(0)+o.label.slice(1).toLowerCase()}</li>`).join('');
+  $('operation-list').innerHTML=level.objectives.map(o=>`<li><b>${o.label.charAt(0)+o.label.slice(1).toLowerCase()}.</b> ${o.detail}</li>`).join('');
+  const select=$('operation');
+  select.innerHTML=LEVELS.map((l,i)=>`<option value="${i}"${i>=campaign.unlocked?' disabled':''}${i===operation?' selected':''}>${String(i+1).padStart(2,'0')} · ${l.name}${i>=campaign.unlocked?' · LOCKED':''}</option>`).join('');
+  select.disabled=campaign.unlocked<2;
+}
+// A new operation needs a new world; the old one hands its buffers back first.
+function loadOperation(index) {
+  operation=clamp(index,0,campaign.unlocked-1);save.set('operation',operation);
+  game=createGame($('difficulty').value,operation);
+  if(world){world.dispose();world=new World(scene,game);}
+  describeOperation();
+  cameraFocus.set(game.base.x,1,game.base.z);updateCamera(1,true);
+}
 function deploy() {
-  game=createGame($('difficulty').value);save.set('difficulty',game.difficulty);world.reset(game);
+  game=createGame($('difficulty').value,operation);save.set('difficulty',game.difficulty);world.reset(game);
   $('briefing').hidden=true;$('debrief').hidden=true;$('pause-screen').hidden=true;$('manual').hidden=true;$('map-screen').hidden=true;
   startGame(game);document.body.dataset.phase='playing';clearInput();mouseAim=null;lastMouse=0;shake=0;damageFlash=0;
   cameraFocus.set(game.p.x,1,game.p.z);audio.start().catch(()=>{});
   toast(isTouch?'FLIGHT: LEFT THUMB  /  WEAPONS: RIGHT THUMB':'W A S D TO FLY  ·  SPACE TO FIRE  ·  M FOR MAP',6);
+  $('next-button').hidden=true;
   if(isTouch&&screen.orientation?.lock&&document.fullscreenElement)screen.orientation.lock('landscape').catch(()=>{});
   refreshHud();
 }
@@ -142,7 +173,7 @@ function openMap() {
 }
 function closeMap() {$('map-screen').hidden=true;setPhase('playing');}
 function returnToBriefing() {
-  game=createGame($('difficulty').value);world.reset(game);$('debrief').hidden=true;$('pause-screen').hidden=true;$('briefing').hidden=false;setPhase('briefing');updateCamera(1,true);$('deploy-button').focus();
+  game=createGame($('difficulty').value,operation);world.reset(game);$('debrief').hidden=true;$('pause-screen').hidden=true;$('briefing').hidden=false;setPhase('briefing');updateCamera(1,true);$('deploy-button').focus();
 }
 function endMission(success) {
   document.body.dataset.phase=game.phase;clearInput();
@@ -151,8 +182,17 @@ function endMission(success) {
   $('debrief-description').textContent=success?'Four engineers home. One launch stopped. Not bad for a little helicopter.':game.reason;
   const rank=success?(game.time<390&&game.damageTaken<70?'S':game.time<650?'A':'B'):'×';$('rank-badge').textContent=rank;
   $('final-score').textContent=game.score.toLocaleString();
-  const old=save.get('best.'+game.difficulty,0);if(success&&game.score>old)save.set('best.'+game.difficulty,game.score);
+  const key='best.'+game.level.id+'.'+game.difficulty;
+  const old=save.get(key,0);if(success&&game.score>old)save.set(key,game.score);
+  if(success&&operation+1>=campaign.unlocked&&operation+1<LEVELS.length){
+    campaign.unlocked=operation+2;
+    toast('OPERATION '+String(operation+2).padStart(2,'0')+' UNLOCKED',5);
+  }
+  const hasNext=operation+1<LEVELS.length&&operation+1<campaign.unlocked;
+  $('next-button').hidden=!(success&&hasNext);
+  if(success&&hasNext)$('next-button').innerHTML=`NEXT: ${LEVELS[operation+1].name} <span>↗</span>`;
   $('best-score').textContent=success&&game.score>old?'NEW PERSONAL BEST':`PERSONAL BEST · ${Math.max(old,success?game.score:0).toLocaleString()}`;
+  $('debrief-operation').textContent=`OPERATION ${String(operation+1).padStart(2,'0')} · ${game.level.name}`;
   $('stat-time').textContent=formatTime(game.time);$('stat-rescued').textContent=`${success?game.delivered:game.rescued} / 4`;$('stat-kills').textContent=game.kills;
   $('debrief').hidden=false;$('replay-button').focus();
 }
@@ -166,6 +206,11 @@ function handleEvents() {
     if(event.type==='objective')toast(['','01 COMPLETE · COASTAL RADAR OFFLINE','02 COMPLETE · ENGINEERS ABOARD','03 COMPLETE · LAUNCH PREVENTED'][event.stage],4);
     if(event.type==='end')endMission(event.success);
     if(event.type==='empty')toast(`${WEAPONS[event.weapon].short} EMPTY · REARM AT A GREEN PAD`,2);
+    if(event.type==='capture')toast('PRISONER ABOARD',3);
+    if(event.type==='delivered')toast(`${event.cargo} HANDED OVER · ARMOR PATCHED`,3);
+    if(event.type==='recon')toast('SCAN COMPLETE',3);
+    if(event.type==='arrived')toast('CONVOY IS CLEAR',3);
+    if(event.type==='escaped')toast('TARGET SLIPPED THE NET',3);
     if(event.type==='shield'&&toastTime<=0)toast('SHIELD ACTIVE · DESTROY BOTH POWER NODES',3);
   }
   game.events.length=0;
@@ -182,9 +227,11 @@ function readInput() {
 }
 function refreshHud() {
   const p=game.p,obj=objective(game);
-  $('mission-index').textContent=`${obj.index} / 04`;$('mission-title').textContent=obj.label;$('mission-detail').textContent=obj.detail;
+  $('mission-index').textContent=`${obj.index} / ${String(obj.total).padStart(2,'0')}`;$('mission-title').textContent=obj.label;$('mission-detail').textContent=obj.detail;
   document.querySelectorAll('.mission-steps i').forEach((el,i)=>el.className=i<game.stage?'done':i===game.stage?'active':'');
-  $('flight-time').textContent=formatTime(game.time);$('countdown').hidden=game.stage!==2;$('countdown').querySelector('b').textContent=formatTime(game.launchTimer);
+  $('flight-time').textContent=formatTime(game.time);
+  const clock=objective(game).timed&&game.objectiveTimer>0;
+  $('countdown').hidden=!clock;if(clock)$('countdown').querySelector('b').textContent=formatTime(game.objectiveTimer);
   $('armor-value').textContent=Math.ceil(p.armor);$('fuel-value').textContent=Math.ceil(p.fuel);
   $('armor-bar').style.width=p.armor+'%';$('fuel-bar').style.width=p.fuel+'%';$('armor-bar').style.background=p.armor<30?'var(--red)':'var(--green)';
   $('fuel-bar').style.background=p.fuel<25?'var(--red)':'var(--amber)';
@@ -198,13 +245,17 @@ function refreshHud() {
   $('radio').classList.toggle('visible',game.messageTime>0&&game.phase==='playing'&&!context);
   if(context) {
     $('context-label').textContent=context.label;
-    const hint=context.enabled?(context.kind==='rescue'?'Hold E / WINCH to lift the crew':context.kind==='extract'?'Hold E / WINCH to land and extract':'Hold E / WINCH to repair and replenish'):(Math.hypot(p.vx,p.vz)>=5?'Release flight control to hold a steady hover':'Eliminate the compound defenders');
+    const hints={rescue:'Hold E / WINCH to lift the crew',capture:'Hold E / WINCH to take them aboard',
+      recon:'Hold E / WINCH to keep the scanner on target',deliver:'Hold E / WINCH to set down and hand over',
+      extract:'Hold E / WINCH to land and extract',service:'Hold E / WINCH to repair and replenish'};
+    const hint=context.enabled?(hints[context.kind]??hints.service):(Math.hypot(p.vx,p.vz)>=5?'Release flight control to hold a steady hover':'Eliminate the compound defenders');
     $('context-hint').textContent=isTouch?hint.replace('E / ',''):hint.replace(' / WINCH','');
     $('context-progress').style.width=clamp(context.progress,0,1)*100+'%';
-    $('touch-interact').querySelector('small').textContent=context.kind==='rescue'?'WINCH':context.kind==='extract'?'LAND':'SUPPLY';
+    $('touch-interact').querySelector('small').textContent=({rescue:'WINCH',capture:'WINCH',recon:'SCAN',deliver:'LAND',extract:'LAND'})[context.kind]??'SUPPLY';
   } else $('touch-interact').querySelector('small').textContent='WINCH';
   const incoming=game.projectiles.some(b=>b.enemy&&b.homing&&b.life>0&&distance(b,p)<50);$('incoming').hidden=!incoming;
-  $('map-sector').textContent=`SECTOR ${String.fromCharCode(65+clamp(Math.floor((p.x+160)/80),0,3))}${clamp(Math.floor((p.z+160)/80)+1,1,4)}`;
+  const cell=game.limit/2;
+  $('map-sector').textContent=`SECTOR ${String.fromCharCode(65+clamp(Math.floor((p.x+game.limit)/cell),0,3))}${clamp(Math.floor((p.z+game.limit)/cell)+1,1,4)}`;
   drawMap($('minimap'),false);
 }
 function projectWorld(x,y,z) {
@@ -227,16 +278,18 @@ function updateMarkers() {
 function drawMap(canvas,large) {
   const ctx=canvas.getContext('2d'),s=canvas.width,h=canvas.height;
   ctx.clearRect(0,0,s,h);ctx.fillStyle='#1d3832';ctx.fillRect(0,0,s,h);
-  const scale=(large?s-50:s-26)/330,ox=s/2,oz=h/2;
+  const scale=(large?s-50:s-26)/(game.limit*2.1),ox=s/2,oz=h/2;
   const map=(x,z)=>[ox+x*scale,oz+z*scale];
   ctx.strokeStyle='#728b6c24';ctx.lineWidth=1;
-  for(let i=-160;i<=160;i+=40){const [x,z]=map(i,i);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.moveTo(0,z);ctx.lineTo(s,z);ctx.stroke();}
-  for(const poly of ISLANDS) {
+  const grid=game.limit/4;
+  for(let i=-game.limit;i<=game.limit;i+=grid){const [x,z]=map(i,i);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.moveTo(0,z);ctx.lineTo(s,z);ctx.stroke();}
+  for(const poly of game.level.islands) {
     ctx.beginPath();poly.forEach(([x,z],i)=>{const p=map(x,z);i?ctx.lineTo(...p):ctx.moveTo(...p);});ctx.closePath();ctx.fillStyle='#526d4f';ctx.fill();ctx.strokeStyle='#819873';ctx.lineWidth=large?2:1.3;ctx.stroke();
   }
-  ctx.strokeStyle='#bbc19c6b';ctx.lineWidth=large?4:2;ctx.beginPath();ctx.moveTo(...map(53,-66));ctx.lineTo(...map(76,-66));ctx.stroke();
+  ctx.strokeStyle='#bbc19c6b';ctx.lineWidth=large?4:2;
+  for(const [ax,az,bx,bz] of game.level.spans ?? []){ctx.beginPath();ctx.moveTo(...map(ax,az));ctx.lineTo(...map(bx,bz));ctx.stroke();}
   // Mission route is intentionally faint, so threats remain readable.
-  if(large) {ctx.setLineDash([7,8]);ctx.lineWidth=2;ctx.strokeStyle='#f3b25e38';ctx.beginPath();[BASE,{x:-66,z:20},CAMP,{x:99,z:-79},BASE].forEach((p,i)=>i?ctx.lineTo(...map(p.x,p.z)):ctx.moveTo(...map(p.x,p.z)));ctx.stroke();ctx.setLineDash([]);}
+  if(large&&game.level.route) {ctx.setLineDash([7,8]);ctx.lineWidth=2;ctx.strokeStyle='#f3b25e38';ctx.beginPath();game.level.route.forEach((p,i)=>i?ctx.lineTo(...map(p.x,p.z)):ctx.moveTo(...map(p.x,p.z)));ctx.stroke();ctx.setLineDash([]);}
   for(const e of game.enemies) {
     if(e.type==='crate')continue;
     const [x,z]=map(e.x,e.z);ctx.fillStyle=e.dead?'#80947b80':e.generator?'#83cebb':'#e28b69';
@@ -244,10 +297,16 @@ function drawMap(canvas,large) {
     const r=large?(e.type==='command'?8:5):e.type==='command'?5:3;
     ctx.beginPath();ctx.moveTo(x,z-r);ctx.lineTo(x+r,z);ctx.lineTo(x,z+r);ctx.lineTo(x-r,z);ctx.closePath();ctx.fill();
   }
-  for(const p of [BASE,DEPOT]) {
+  for(const p of [game.base,...game.depots]) {
     const [x,z]=map(p.x,p.z),r=large?7:4;ctx.strokeStyle='#bddfa8';ctx.lineWidth=large?3:2;
     ctx.beginPath();ctx.moveTo(x-r,z);ctx.lineTo(x+r,z);ctx.moveTo(x,z-r);ctx.lineTo(x,z+r);ctx.stroke();
     ctx.strokeStyle='#bddfa859';ctx.strokeRect(x-r-4,z-r-4,(r+4)*2,(r+4)*2);
+  }
+  for(const f of game.friendlies) {
+    if(f.dead)continue;
+    const [x,z]=map(f.x,f.z),r=large?6:4;
+    ctx.fillStyle=f.arrived?'#bddfa8':'#9fe0c8';
+    ctx.beginPath();ctx.moveTo(x,z-r);ctx.lineTo(x+r,z+r);ctx.lineTo(x-r,z+r);ctx.closePath();ctx.fill();
   }
   const obj=objective(game),[tx,tz]=map(obj.x,obj.z),r=large?15:8;
   ctx.strokeStyle='#ffd78b';ctx.lineWidth=large?2.5:1.5;ctx.beginPath();ctx.arc(tx,tz,r,0,Math.PI*2);ctx.stroke();
@@ -255,10 +314,11 @@ function drawMap(canvas,large) {
   ctx.fillStyle='#f4edc9';ctx.beginPath();const n=large?12:7;ctx.moveTo(0,-n);ctx.lineTo(n*.65,n*.7);ctx.lineTo(0,n*.28);ctx.lineTo(-n*.65,n*.7);ctx.closePath();ctx.fill();ctx.restore();
   if(large) {
     ctx.font='600 15px "Barlow",sans-serif';ctx.textBaseline='bottom';ctx.fillStyle='#d1dcc0';
-    for(const [x,z,text] of [[-99,134,'HOMEPLATE'],[-90,6,'RADAR'],[-7,-40,'ENGINEERS'],[83,-115,'STORM BATTERY'],[-23,-10,'FIELD SUPPLY'],[71,98,'PORT TERN']]) {
+    for(const [x,z,text] of game.level.labels ?? []) {
       const [lx,lz]=map(x,z);ctx.fillText(text,lx-text.length*4.4,lz);
     }
-    ctx.font='12px "Barlow",sans-serif';ctx.fillStyle='#a3b79a';for(let i=0;i<4;i++){ctx.fillText(String.fromCharCode(65+i),map(-120+i*80,0)[0],18);ctx.fillText(String(i+1),9,map(0,-120+i*80)[1]);}
+    ctx.font='12px "Barlow",sans-serif';ctx.fillStyle='#a3b79a';
+    for(let i=0;i<4;i++){const c=-game.limit*.75+i*game.limit/2;ctx.fillText(String.fromCharCode(65+i),map(c,0)[0],18);ctx.fillText(String(i+1),9,map(0,c)[1]);}
   }
 }
 
@@ -333,6 +393,8 @@ $('help-button').addEventListener('click',openManual);$('pause-help').addEventLi
 $('minimap-button').addEventListener('click',openMap);$('close-map').addEventListener('click',closeMap);$('map-resume').addEventListener('click',closeMap);
 $('brand-home').addEventListener('click',e=>{e.preventDefault();if(game.phase==='playing')pause();});
 $('quality').addEventListener('change',()=>{setQuality($('quality').value);autoDownshifted=false;performanceTime=0;});
+$('operation').addEventListener('change',()=>loadOperation(Number($('operation').value)));
+$('next-button').addEventListener('click',()=>{loadOperation(operation+1);$('debrief').hidden=true;$('briefing').hidden=false;setPhase('briefing');$('deploy-button').focus();});
 function toggleAudio(){audio.setEnabled(!audio.enabled);save.set('audio',audio.enabled);$('audio-label').textContent=audio.enabled?'SOUND ON':'SOUND OFF';$('audio-button').setAttribute('aria-label',audio.enabled?'Mute sound':'Enable sound');}
 $('audio-button').addEventListener('click',toggleAudio);$('volume').addEventListener('input',()=>{audio.setVolume(Number($('volume').value)/100);save.set('volume',audio.volume);});
 $('fullscreen-button').addEventListener('click',async()=>{
@@ -344,7 +406,7 @@ $('scene').addEventListener('webglcontextlost',e=>{e.preventDefault();webglLost=
 $('scene').addEventListener('webglcontextrestored',()=>location.reload());
 
 // Read-only diagnostics are also useful when a player reports a hardware-specific issue.
-window.blockhawk={getState:()=>JSON.parse(JSON.stringify({phase:game.phase,stage:game.stage,time:game.time,score:game.score,rescued:game.rescued,delivered:game.delivered,p:game.p,enemies:game.enemies,projectiles:game.projectiles,launchTimer:game.launchTimer,target:game.target,objective:objective(game),context:contextAction(game)})),getPerformance:()=>({fps:Math.round(actualFps),quality:resolvedQuality,pixelRatio:renderer?.getPixelRatio(),drawCalls:renderer?.info.render.calls,triangles:renderer?.info.render.triangles,ready:initialReady,touch:isTouch}),getAudio:()=>({state:audio.ctx?.state??'not-started',enabled:audio.enabled,volume:audio.volume})};
+window.blockhawk={getState:()=>JSON.parse(JSON.stringify({phase:game.phase,stage:game.stage,time:game.time,score:game.score,rescued:game.rescued,delivered:game.delivered,p:game.p,enemies:game.enemies,projectiles:game.projectiles,objectiveTimer:game.objectiveTimer,target:game.target,objective:objective(game),context:contextAction(game),level:game.level.id,levelIndex:game.levelIndex,operations:LEVELS.length,unlocked:campaign.unlocked,friendlies:game.friendlies,captured:game.captured,delivered:game.delivered})),getPerformance:()=>({fps:Math.round(actualFps),quality:resolvedQuality,pixelRatio:renderer?.getPixelRatio(),drawCalls:renderer?.info.render.calls,triangles:renderer?.info.render.triangles,ready:initialReady,touch:isTouch}),getAudio:()=>({state:audio.ctx?.state??'not-started',enabled:audio.enabled,volume:audio.volume})};
 // Explicitly gated testing support. Production play never reads or enables this automatically.
 if(new URLSearchParams(location.search).has('test')) {
   window.blockhawk.test={

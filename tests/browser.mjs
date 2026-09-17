@@ -72,7 +72,7 @@ try {
   assert.equal(mission.final.phase,'won');assert.equal(mission.final.delivered,4);assert.ok(await page.locator('#debrief').isVisible());
   evidence.desktop.mission={time:mission.final.time,score:mission.final.score,minArmor:mission.minArmor,kills:mission.final.enemies.filter(e=>e.dead).length,route:mission.route};
   await page.screenshot({path:'artifacts/mission-complete.png'});record('Complete mission succeeds using flight, combat, resupply, winch and extraction controls');
-  const persisted=await page.evaluate(()=>({best:JSON.parse(localStorage.getItem('blockhawk.best.pilot')),quality:JSON.parse(localStorage.getItem('blockhawk.quality')),volume:JSON.parse(localStorage.getItem('blockhawk.volume'))}));
+  const persisted=await page.evaluate(()=>({best:JSON.parse(localStorage.getItem('blockhawk.best.delta.pilot')),quality:JSON.parse(localStorage.getItem('blockhawk.quality')),volume:JSON.parse(localStorage.getItem('blockhawk.volume'))}));
   assert.equal(persisted.best,mission.final.score);assert.equal(persisted.quality,'cinematic');assert.equal(persisted.volume,.35);record('Best score and graphics/audio preferences persist in local storage');
   await page.locator('#replay-button').click();let fresh=await state(page);assert.equal(fresh.stage,0);assert.equal(fresh.rescued,0);assert.equal(fresh.score,0);assert.equal(fresh.p.armor,100);assert.ok(fresh.enemies.every(e=>!e.dead));record('Replay fully resets mission and enemies');
   await page.evaluate(()=>{window.blockhawk.test.setPlayer({fuel:.001});window.blockhawk.test.step({},.2);});assert.equal((await state(page)).phase,'failed');assert.ok(await page.locator('#debrief').isVisible());

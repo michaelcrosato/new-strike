@@ -1,8 +1,11 @@
 // Deterministic simulation, shared by the renderer and the headless mission tests.
-export const WORLD_LIMIT = 157;
-export const BASE = { x: -99, z: 111, radius: 13 };
-export const DEPOT = { x: -8, z: -26, radius: 8 };
-export const CAMP = { x: 10, z: -51, radius: 9 };
+import { LEVELS } from './levels.js';
+export { LEVELS };
+// The first operation's map, kept as named exports for the deterministic tests.
+export const WORLD_LIMIT = LEVELS[0].limit;
+export const BASE = LEVELS[0].base;
+export const DEPOT = LEVELS[0].depots[0];
+export const CAMP = LEVELS[0].zones.camp;
 export const WEAPONS = [
   { name: '30MM CANNON', short: 'CANNON', max: 600, cooldown: 0.095, damage: 8, speed: 125, range: 56, spread: 0.012 },
   { name: 'HYDRA ROCKETS', short: 'ROCKETS', max: 36, cooldown: 0.42, damage: 62, speed: 80, range: 64, splash: 7 },
@@ -25,40 +28,33 @@ const makeEnemy = (id, type, x, z, extra = {}) => {
     radar: [210, 0, 6, 900], turret: [90, 44, 2.9, 150], sam: [120, 69, 5.1, 250],
     tank: [150, 46, 3.8, 250], boat: [110, 50, 3.3, 200], generator: [140, 0, 0, 450],
     command: [620, 76, 3.1, 1800], crate: [18, 0, 0, 40],
+    bridge: [400, 0, 0, 1100], silo: [700, 84, 3.4, 2400], fueltank: [55, 0, 0, 220],
+    officer: [26, 0, 0, 150], truck: [95, 0, 0, 260],
   }[type];
-  return { id, type, x, z, y: type === 'boat' ? 1.4 : 3.5, hp: stats[0], maxHp: stats[0],
-    range: stats[1], rate: stats[2], score: stats[3], radius: type === 'command' ? 7 : type === 'radar' ? 5 : type === 'crate' ? 2 : 3,
-    yaw: 0, cooldown: 1.5 + (id.length % 4) * 0.55, dead: false, ...extra };
+  return { id, type, x, z, y: type === 'boat' ? 1.4 : type === 'officer' ? 2.8 : 3.5, hp: stats[0], maxHp: stats[0],
+    range: stats[1], rate: stats[2], score: stats[3], radius: { command: 7, silo: 7, bridge: 9, radar: 5, crate: 2, fueltank: 2.6, officer: 1.6 }[type] ?? 3,
+    yaw: 0, waypoint: 0, cooldown: 1.5 + (id.length % 4) * 0.55, dead: false, ...extra };
 };
 
-export function createGame(difficulty = 'pilot') {
+const makeFriendly = (id, type, x, z, extra = {}) => ({
+  id, type, x, z, y: type === 'boat' ? 1.4 : 3.2, hp: 200, maxHp: 200, yaw: 0, waypoint: 0,
+  speed: type === 'boat' ? 6.5 : 7.5, dead: false, arrived: false, halted: 0, ...extra });
+
+const buildRoster = (list, make) => (list ?? []).map(([id, type, x, z, extra]) =>
+  make(id, type, x, z, { ...extra }));
+
+export function createGame(difficulty = 'pilot', levelIndex = 0) {
+  const level = LEVELS[clamp(Math.round(levelIndex) || 0, 0, LEVELS.length - 1)];
   return {
-    phase: 'briefing', difficulty, time: 0, stage: 0, score: 0, kills: 0, rescued: 0, delivered: 0,
-    service: 0, rescue: 0, extraction: 0, supplyVisits: 0, message: '', messageTime: 0,
-    launchTimer: 300, nextId: 0, shots: 0, hits: 0, damageTaken: 0, reason: '', flares: 0,
-    p: { x: BASE.x, z: BASE.z, y: 8, vx: 0, vz: 0, yaw: -0.26, armor: 100, fuel: 100,
+    phase: 'briefing', difficulty, level, levelIndex: LEVELS.indexOf(level),
+    limit: level.limit, base: level.base, depots: level.depots, zones: level.zones ?? {},
+    time: 0, stage: 0, score: 0, kills: 0, rescued: 0, delivered: 0, captured: 0, aboard: [],
+    service: 0, rescue: 0, extraction: 0, recon: 0, supplyVisits: 0, message: '', messageTime: 0,
+    objectiveTimer: 0, timerFor: null, nextId: 0, shots: 0, hits: 0, damageTaken: 0, reason: '', flares: 0,
+    p: { x: level.base.x, z: level.base.z, y: 8, vx: 0, vz: 0, yaw: -0.26, armor: 100, fuel: 100,
       ammo: WEAPONS.map(w => w.max), weapon: 0, cooldown: 0, flareCooldown: 0, invulnerable: 2, cargo: 0 },
-    enemies: [
-      makeEnemy('coastal-radar', 'radar', -66, 20),
-      makeEnemy('coast-aa', 'turret', -83, 39),
-      makeEnemy('road-tank', 'tank', -45, 5, { patrol: [{ x: -47, z: 5 }, { x: -73, z: 47 }], waypoint: 0 }),
-      makeEnemy('coast-sam', 'sam', -46, 39),
-      makeEnemy('camp-west', 'turret', -9, -49, { guard: true }),
-      makeEnemy('camp-east', 'turret', 31, -50, { guard: true }),
-      makeEnemy('camp-tank', 'tank', 10, -71, { guard: true, patrol: [{ x: 8, z: -73 }, { x: 27, z: -69 }], waypoint: 0 }),
-      makeEnemy('river-patrol', 'boat', -26, -7, { patrol: [{ x: -29, z: -7 }, { x: -49, z: -50 }], waypoint: 0 }),
-      makeEnemy('harbor-patrol', 'boat', 46, 88, { patrol: [{ x: 46, z: 88 }, { x: 115, z: 93 }], waypoint: 0 }),
-      makeEnemy('harbor-aa', 'turret', 77, 38),
-      makeEnemy('bridge-tank', 'tank', 54, -66),
-      makeEnemy('citadel-sam', 'sam', 75, -91),
-      makeEnemy('citadel-aa', 'turret', 115, -61),
-      makeEnemy('generator-west', 'generator', 77, -55, { generator: true }),
-      makeEnemy('generator-east', 'generator', 113, -96, { generator: true }),
-      makeEnemy('storm-command', 'command', 99, -79),
-      makeEnemy('fuel-coast', 'crate', -91, 17, { explosive: true }),
-      makeEnemy('fuel-camp', 'crate', 29, -65, { explosive: true }),
-      makeEnemy('fuel-command', 'crate', 120, -64, { explosive: true }),
-    ],
+    enemies: buildRoster(level.enemies, makeEnemy),
+    friendlies: buildRoster(level.friendlies, makeFriendly),
     projectiles: [], events: [], target: null,
   };
 }
@@ -68,31 +64,171 @@ export function radio(g, text, speaker = 'CONTROL', duration = 6) {
   g.message = text; g.messageTime = duration; emit(g, 'radio', { text, speaker });
 }
 export function startGame(g) {
-  g.phase = 'playing'; radio(g, 'Hawk, you are cleared hot. Knock out the coastal radar. Keep moving under fire.', 'KESTREL');
+  g.phase = 'playing'; radio(g, g.level.start, 'KESTREL');
 }
+// ---- objective engine -------------------------------------------------------------
+// Each kind answers four questions: is it blocked, where does the marker point, what does
+// the readout say, and is it done. Levels only supply data.
+const zoneOf = (g, name) => (name && g.zones[name]) || g.base;
+const listTargets = (g, o) => (o.targets ?? []).map(id => g.enemies.find(e => e.id === id)).filter(Boolean);
+const taggedEnemies = (g, tag) => g.enemies.filter(e => e[tag]);
+const nearestOf = (g, list) => list.slice().sort((a, b) => distance(g.p, a) - distance(g.p, b))[0];
+const friendlyOf = (g, id) => g.friendlies.find(f => f.id === id);
+export const isShielded = (g, e) => !!e.shieldedBy && g.enemies.some(n => n[e.shieldedBy] && !n.dead);
+
+const KINDS = {
+  destroy: {
+    blocked: (g, o) => listTargets(g, o).some(e => !e.dead && isShielded(g, e)),
+    at: (g, o) => {
+      const target = listTargets(g, o).find(e => !e.dead);
+      if (target && isShielded(g, target)) return nearestOf(g, taggedEnemies(g, target.shieldedBy).filter(e => !e.dead)) ?? target;
+      return target ?? o.at ?? g.base;
+    },
+    short: (g, o, blocked) => {
+      if (!blocked) return o.short;
+      const tag = listTargets(g, o).find(e => !e.dead).shieldedBy;
+      const all = taggedEnemies(g, tag);
+      return `${o.blockedShort ?? 'SHIELD NODES'} · ${all.filter(e => e.dead).length}/${all.length}`;
+    },
+    done: (g, o) => listTargets(g, o).length > 0 && listTargets(g, o).every(e => e.dead),
+  },
+  destroyTag: {
+    at: (g, o) => nearestOf(g, taggedEnemies(g, o.tag).filter(e => !e.dead)) ?? o.at ?? g.base,
+    short: (g, o) => {
+      const all = taggedEnemies(g, o.tag);
+      return `${o.short} · ${all.filter(e => e.dead).length}/${all.length}`;
+    },
+    done: (g, o) => taggedEnemies(g, o.tag).every(e => e.dead),
+  },
+  rescue: {
+    blocked: (g, o) => !!o.guardTag && taggedEnemies(g, o.guardTag).some(e => !e.dead),
+    at: (g, o) => zoneOf(g, o.zone),
+    short: (g, o, blocked) => blocked
+      ? `GUARDS · ${taggedEnemies(g, o.guardTag).filter(e => !e.dead).length} REMAINING`
+      : `${o.short} · ${g.rescued}/${o.count}`,
+    done: (g, o) => g.rescued >= o.count,
+  },
+  capture: {
+    at: (g, o) => g.enemies.find(e => e.id === o.target) ?? o.at ?? g.base,
+    short: (g, o) => {
+      const unit = g.enemies.find(e => e.id === o.target);
+      return unit?.captured ? `${o.short} · ABOARD` : unit?.dead ? `${o.short} · LOST` : o.short;
+    },
+    done: (g, o) => !!g.enemies.find(e => e.id === o.target)?.captured,
+    fail: (g, o) => {
+      const unit = g.enemies.find(e => e.id === o.target);
+      return unit && unit.dead && !unit.captured
+        ? { title: 'PRISONER LOST', reason: o.failReason ?? 'You needed that one alive. Hover over the target and hold the winch instead of firing.' } : null;
+    },
+  },
+  deliver: {
+    at: (g, o) => (o.to === 'base' ? g.base : g.depots.find(d => d.letter === o.to) ?? g.base),
+    short: (g, o) => `${o.short} · ${g.p.cargo} ABOARD`,
+    done: (g, o) => g.delivered >= (o.count ?? 1),
+  },
+  recon: {
+    at: (g, o) => zoneOf(g, o.zone),
+    short: (g, o) => `${o.short} · ${Math.round(Math.min(1, g.recon / o.seconds) * 100)}%`,
+    done: (g, o) => g.recon >= o.seconds,
+  },
+  escort: {
+    at: (g, o) => friendlyOf(g, o.unit) ?? g.base,
+    short: (g, o) => {
+      const unit = friendlyOf(g, o.unit);
+      if (!unit) return o.short;
+      const left = unit.path ? unit.path.length - unit.waypoint : 0;
+      return unit.arrived ? `${o.short} · CLEAR` : `${o.short} · ${Math.round(unit.hp / unit.maxHp * 100)}% · ${left} LEG${left === 1 ? '' : 'S'}`;
+    },
+    done: (g, o) => !!friendlyOf(g, o.unit)?.arrived,
+    fail: (g, o) => friendlyOf(g, o.unit)?.dead
+      ? { title: 'ESCORT LOST', reason: o.failReason ?? 'They were counting on cover. Clear the road ahead of the convoy before it reaches the guns.' } : null,
+  },
+  intercept: {
+    at: (g, o) => g.enemies.find(e => e.id === o.target) ?? o.at ?? g.base,
+    short: (g, o) => {
+      const unit = g.enemies.find(e => e.id === o.target);
+      if (!unit || unit.dead) return `${o.short} · DOWN`;
+      const left = unit.escape ? unit.escape.length - unit.waypoint : 0;
+      return `${o.short} · ${left} LEG${left === 1 ? '' : 'S'} TO OPEN WATER`;
+    },
+    done: (g, o) => !!g.enemies.find(e => e.id === o.target)?.dead,
+    fail: (g, o) => g.enemies.find(e => e.id === o.target)?.escaped
+      ? { title: 'TARGET ESCAPED', reason: o.failReason ?? 'It slipped the net. Cut it off early with seekers instead of chasing from behind.' } : null,
+  },
+  extract: {
+    at: g => g.base,
+    short: (g, o) => o.short,
+    done: () => false,   // the landing itself finishes the operation
+  },
+};
+
+export const objectiveList = g => g.level.objectives;
+export const activeIndex = g => Math.min(g.stage, g.level.objectives.length - 1);
 export function objective(g) {
-  if (g.stage === 0) return { x: -66, z: 20, label: 'DESTROY COASTAL RADAR', short: 'RADAR ARRAY', detail: 'Cut the island’s early warning network.', index: '01' };
-  if (g.stage === 1) {
-    const guards = g.enemies.filter(e => e.guard && !e.dead).length;
-    return { ...CAMP, label: guards ? 'CLEAR THE RESCUE COMPOUND' : 'WINCH THE ENGINEERS', short: guards ? `GUARDS · ${guards} REMAINING` : `ENGINEERS · ${g.rescued}/4`, detail: guards ? 'Eliminate the three compound defenders.' : 'Hover over the amber rescue beacon. Hold E / WINCH.', index: '02' };
-  }
-  if (g.stage === 2) {
-    const generators = g.enemies.filter(e => e.generator && !e.dead);
-    const closest = generators.sort((a, b) => distance(g.p, a) - distance(g.p, b))[0];
-    return { x: closest?.x ?? 99, z: closest?.z ?? -79, label: generators.length ? 'BREAK THE STORM SHIELD' : 'DESTROY THE STORM BATTERY', short: generators.length ? `POWER NODES · ${2 - generators.length}/2` : 'STORM BATTERY', detail: generators.length ? 'Destroy both power nodes to expose the battery.' : 'Battery exposed. Stop the missile launch.', index: '03' };
-  }
-  return { ...BASE, label: 'RETURN TO THE CARRIER', short: 'EXTRACTION · HOMEPLATE', detail: 'Bring the crew home. Hover above the carrier and hold E / LAND.', index: '04' };
+  const list = g.level.objectives, index = activeIndex(g), o = list[index], kind = KINDS[o.kind];
+  const blocked = kind.blocked ? kind.blocked(g, o) : false;
+  const at = kind.at ? kind.at(g, o) : (o.at ?? g.base);
+  return {
+    x: at.x, z: at.z, kind: o.kind, id: o.id ?? o.kind + index,
+    label: blocked ? (o.blockedLabel ?? o.label) : o.label,
+    detail: blocked ? (o.blockedDetail ?? o.detail) : o.detail,
+    short: kind.short ? kind.short(g, o, blocked) : o.short,
+    index: String(index + 1).padStart(2, '0'), total: list.length,
+    blocked, timed: !!o.timer,
+  };
 }
 
 export function contextAction(g) {
-  const speed = Math.hypot(g.p.vx, g.p.vz);
-  if (distance(g.p, BASE) < BASE.radius) return { kind: g.stage === 3 ? 'extract' : 'service', label: g.stage === 3 ? 'LAND & EXTRACT' : 'REPAIR & REARM', enabled: speed < 7, progress: g.stage === 3 ? g.extraction / 3 : g.service / 4 };
-  if (distance(g.p, DEPOT) < DEPOT.radius) return { kind: 'service', label: 'FIELD RESUPPLY', enabled: speed < 7, progress: g.service / 4 };
-  if (g.stage === 1 && distance(g.p, CAMP) < CAMP.radius) {
-    const guards = g.enemies.some(e => e.guard && !e.dead);
-    return { kind: 'rescue', label: guards ? 'CLEAR COMPOUND FIRST' : `WINCH ENGINEER ${g.rescued + 1}/4`, enabled: !guards && speed < 5, progress: g.rescue / 1.6 };
+  const speed = Math.hypot(g.p.vx, g.p.vz), list = g.level.objectives, o = list[activeIndex(g)];
+  if (distance(g.p, g.base) < g.base.radius) {
+    const finishing = o.kind === 'extract';
+    const dropping = o.kind === 'deliver' && o.to === 'base' && g.p.cargo > 0;
+    if (finishing || dropping) return { kind: finishing ? 'extract' : 'deliver', label: finishing ? 'LAND & EXTRACT' : 'LAND & HAND OVER', enabled: speed < 7, progress: (finishing ? g.extraction : g.extraction) / 3 };
+    return { kind: 'service', label: 'REPAIR & REARM', enabled: speed < 7, progress: g.service / 4 };
+  }
+  for (const depot of g.depots) if (distance(g.p, depot) < depot.radius) {
+    if (o.kind === 'deliver' && o.to === depot.letter && g.p.cargo > 0) return { kind: 'deliver', label: 'LAND & HAND OVER', enabled: speed < 7, progress: g.extraction / 3 };
+    return { kind: 'service', label: 'FIELD RESUPPLY', enabled: speed < 7, progress: g.service / 4 };
+  }
+  if (o.kind === 'rescue') {
+    const zone = zoneOf(g, o.zone);
+    if (distance(g.p, zone) < zone.radius) {
+      const guards = o.guardTag ? taggedEnemies(g, o.guardTag).some(e => !e.dead) : false;
+      return { kind: 'rescue', label: guards ? 'CLEAR COMPOUND FIRST' : `WINCH ${o.noun ?? 'SURVIVOR'} ${g.rescued + 1}/${o.count}`, enabled: !guards && speed < 5, progress: g.rescue / 1.6 };
+    }
+  }
+  if (o.kind === 'capture') {
+    const unit = g.enemies.find(e => e.id === o.target);
+    if (unit && !unit.dead && distance(g.p, unit) < (o.radius ?? 9)) {
+      return { kind: 'capture', label: `WINCH ${o.noun ?? 'PRISONER'}`, enabled: speed < 5, progress: g.rescue / 2.2 };
+    }
+  }
+  if (o.kind === 'recon') {
+    const zone = zoneOf(g, o.zone);
+    if (distance(g.p, zone) < zone.radius) return { kind: 'recon', label: o.actionLabel ?? 'HOLD SCAN', enabled: speed < 5, progress: g.recon / o.seconds };
   }
   return null;
+}
+
+// Advances the chain, runs the active objective's clock and applies its failure rule.
+function advanceObjectives(g, dt) {
+  const list = g.level.objectives;
+  if (g.stage >= list.length) return;
+  const o = list[g.stage], kind = KINDS[o.kind];
+  const failure = kind.fail?.(g, o);
+  if (failure) { fail(g, failure.title, failure.reason); return; }
+  if (o.timer) {
+    if (g.timerFor !== g.stage && g.objectiveTimer <= 0) { g.objectiveTimer = o.timer.seconds; g.timerFor = g.stage; }
+    g.objectiveTimer -= dt;
+    if (g.objectiveTimer <= 0) { g.objectiveTimer = 0; fail(g, o.timer.title, o.timer.reason); return; }
+  }
+  if (!kind.done(g, o)) return;
+  g.score += o.reward ?? 0;
+  g.stage++; g.objectiveTimer = 0; g.timerFor = null; g.recon = 0;
+  if (g.stage < list.length) {
+    if (o.next) radio(g, o.next, o.speaker ?? 'KESTREL', 9);
+    emit(g, 'objective', { stage: g.stage });
+  }
 }
 
 export function selectTarget(g, aim = null) {
@@ -113,8 +249,9 @@ export function selectTarget(g, aim = null) {
       if (angle > 1.6 && dist > 15) continue;
       value = dist * (0.5 + angle * 0.5);
     }
+    if (e.capturable && !e.captured) continue;   // never auto-lock someone we need alive
     if (e.type === 'crate') value += 12;
-    if (e.type === 'command' && g.enemies.some(n => n.generator && !n.dead)) value += 50;
+    if (isShielded(g, e)) value += 50;
     if (value < nearest) { nearest = value; target = e; }
   }
   g.target = target?.id ?? null;
@@ -123,9 +260,7 @@ export function selectTarget(g, aim = null) {
 
 function damageEnemy(g, e, amount, chain = false) {
   if (e.dead) return;
-  if (e.type === 'command' && g.enemies.some(n => n.generator && !n.dead)) {
-    emit(g, 'shield', { x: e.x, z: e.z, y: 9 }); return;
-  }
+  if (isShielded(g, e)) { emit(g, 'shield', { x: e.x, z: e.z, y: 9 }); return; }
   e.hp -= amount;
   emit(g, 'hit', { x: e.x, y: e.y + 1, z: e.z, heavy: amount > 20 });
   if (e.hp > 0) return;
@@ -134,6 +269,29 @@ function damageEnemy(g, e, amount, chain = false) {
   if (e.explosive && !chain) {
     for (const neighbor of g.enemies) if (!neighbor.dead && distance(neighbor, e) < 14) damageEnemy(g, neighbor, 150, true);
   }
+}
+
+function damageFriendly(g, f, amount) {
+  if (f.dead) return;
+  f.hp -= amount;
+  emit(g, 'hit', { x: f.x, y: f.y + 1, z: f.z });
+  if (f.hp > 0) return;
+  f.hp = 0; f.dead = true;
+  emit(g, 'explosion', { x: f.x, y: f.y, z: f.z, size: 1.5, id: f.id, friendly: true });
+}
+
+function shootFriendly(g, e, f) {
+  const dx = f.x - e.x, dz = f.z - e.z, len = Math.max(0.1, Math.hypot(dx, dz));
+  g.projectiles.push({ id: ++g.nextId, x: e.x, y: e.y + 2.5, z: e.z,
+    vx: dx / len * 36, vz: dz / len * 36, vy: (f.y - e.y - 2.5) / len * 36,
+    life: 4, damage: 14, enemy: true, at: f.id, weapon: 0, travelled: 0 });
+}
+
+// Convoys roll and fleeing units run only while their objective is live.
+function syncObjectiveActors(g) {
+  const o = g.level.objectives[activeIndex(g)];
+  if (o.kind === 'escort') { const unit = g.friendlies.find(f => f.id === o.unit); if (unit) unit.moving = true; }
+  if (o.kind === 'intercept') { const unit = g.enemies.find(e => e.id === o.target); if (unit) unit.fleeing = true; }
 }
 
 function hitPlayer(g, damage) {
@@ -196,7 +354,7 @@ export function update(g, input, dt) {
   p.vx += (mx * speed - p.vx) * drag;
   p.vz += (mz * speed - p.vz) * drag;
   const nextX = p.x + p.vx * dt, nextZ = p.z + p.vz * dt;
-  p.x = clamp(nextX, -WORLD_LIMIT, WORLD_LIMIT); p.z = clamp(nextZ, -WORLD_LIMIT, WORLD_LIMIT);
+  p.x = clamp(nextX, -g.limit, g.limit); p.z = clamp(nextZ, -g.limit, g.limit);
   if (p.x !== nextX) p.vx = 0; if (p.z !== nextZ) p.vz = 0;
   const target = selectTarget(g, input.aim);
   let heading = p.yaw;
@@ -220,13 +378,42 @@ export function update(g, input, dt) {
     emit(g, 'flares', { x: p.x, y: p.y, z: p.z });
   }
 
+  const activeObjective = g.level.objectives[activeIndex(g)];
   if (servicing) {
     if (context.kind === 'rescue') {
       g.rescue += dt;
       if (g.rescue >= 1.6) {
         g.rescue = 0; g.rescued++; p.cargo++; g.score += 350;
         emit(g, 'rescue', { count: g.rescued });
-        if (g.rescued < 4) radio(g, `Engineer ${g.rescued} aboard. Steady on the hover.`, 'WINCH', 2);
+        const noun = (activeObjective.noun ?? 'SURVIVOR').toLowerCase();
+        if (g.rescued < (activeObjective.count ?? 4)) radio(g, `${noun.charAt(0).toUpperCase() + noun.slice(1)} ${g.rescued} aboard. Steady on the hover.`, 'WINCH', 2);
+      }
+    } else if (context.kind === 'capture') {
+      g.rescue += dt;
+      if (g.rescue >= 2.2) {
+        g.rescue = 0;
+        const unit = g.enemies.find(e => e.id === activeObjective.target);
+        if (unit && !unit.dead) {
+          unit.captured = true; unit.dead = true; g.captured++; p.cargo++; g.score += 500;
+          emit(g, 'capture', { id: unit.id, x: unit.x, y: unit.y, z: unit.z });
+          radio(g, activeObjective.aboard ?? 'He is aboard and talking. Get him to the pad.', 'WINCH', 5);
+        }
+      }
+    } else if (context.kind === 'recon') {
+      g.recon += dt;
+      if (g.recon >= (activeObjective.seconds ?? 6) && !g.reconAnnounced) {
+        g.reconAnnounced = true; g.score += 250;
+        emit(g, 'recon', { x: p.x, z: p.z });
+      }
+    } else if (context.kind === 'deliver') {
+      g.extraction += dt;
+      if (g.extraction >= 3 && p.cargo > 0) {
+        g.extraction = 0; g.delivered += p.cargo;
+        // Desert Strike convention: people handed over patch the airframe on the way out.
+        p.armor = Math.min(100, p.armor + 12 * p.cargo); g.score += 300 * p.cargo;
+        emit(g, 'delivered', { count: g.delivered, cargo: p.cargo });
+        p.cargo = 0;
+        radio(g, activeObjective.handover ?? 'They are off your hands. Good work.', 'HOMEPLATE', 5);
       }
     } else if (context.kind === 'extract') {
       g.extraction += dt;
@@ -244,11 +431,28 @@ export function update(g, input, dt) {
         radio(g, 'Armor patched. Tanks topped. Ready for another run.', 'HOMEPLATE');
       }
     }
-  } else { g.rescue = 0; g.service = 0; g.extraction = 0; g.serviceAnnounced = false; }
+  } else { g.rescue = 0; g.service = 0; g.extraction = 0; g.recon = 0; g.serviceAnnounced = false; }
+
+  syncObjectiveActors(g);
+  for (const f of g.friendlies) {
+    if (f.dead || f.arrived || !f.path || !(f.moving || f.always)) continue;
+    const dest = f.path[Math.min(f.waypoint, f.path.length - 1)], d = distance(f, dest);
+    if (d < 2.5) {
+      f.waypoint++;
+      if (f.waypoint >= f.path.length) { f.arrived = true; emit(g, 'arrived', { id: f.id, x: f.x, z: f.z }); }
+    } else {
+      f.x += (dest.x - f.x) / d * f.speed * dt; f.z += (dest.z - f.z) / d * f.speed * dt;
+      f.yaw = Math.atan2(dest.x - f.x, -(dest.z - f.z));
+    }
+  }
 
   for (const e of g.enemies) {
     if (e.dead) continue;
-    if (e.patrol) {
+    if (e.escape && e.fleeing && !e.escaped) {
+      const dest = e.escape[Math.min(e.waypoint, e.escape.length - 1)], d = distance(e, dest);
+      if (d < 2.5) { e.waypoint++; if (e.waypoint >= e.escape.length) { e.escaped = true; emit(g, 'escaped', { id: e.id }); } }
+      else { const velocity = e.type === 'boat' ? 6.5 : 4.5; e.x += (dest.x - e.x) / d * velocity * dt; e.z += (dest.z - e.z) / d * velocity * dt; e.yaw = Math.atan2(dest.x - e.x, -(dest.z - e.z)); }
+    } else if (e.patrol) {
       const dest = e.patrol[e.waypoint]; const d = distance(e, dest);
       if (d < 1) e.waypoint = (e.waypoint + 1) % e.patrol.length;
       else { const velocity = e.type === 'boat' ? 5 : 2.8; e.x += (dest.x - e.x) / d * velocity * dt; e.z += (dest.z - e.z) / d * velocity * dt; e.yaw = Math.atan2(dest.x - e.x, -(dest.z - e.z)); }
@@ -257,8 +461,12 @@ export function update(g, input, dt) {
     e.cooldown -= dt;
     const d = distance(e, p);
     // The friendly carrier has a defensive perimeter so refuelling is always possible.
-    if (d < e.range && distance(p, BASE) > 24 && e.cooldown <= 0 && (e.type !== 'command' || g.stage >= 2)) {
+    if (d < e.range && distance(p, g.base) > 24 && e.cooldown <= 0 && (e.type !== 'command' || g.stage >= 2)) {
       shootEnemy(g, e); e.cooldown = e.rate * difficulty.enemyRate;
+    } else if (e.cooldown <= 0) {
+      // Nothing to shoot at overhead: lean on whatever friendly column is in range instead.
+      const convoy = g.friendlies.find(f => !f.dead && !f.arrived && distance(e, f) < e.range);
+      if (convoy) { shootFriendly(g, e, convoy); e.cooldown = e.rate * difficulty.enemyRate * 1.2; }
     }
   }
 
@@ -282,7 +490,10 @@ export function update(g, input, dt) {
     b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
     b.travelled += Math.hypot(b.vx, b.vz) * dt;
     if (b.enemy) {
-      if (distance(b, p) < 3 && Math.abs(b.y - p.y) < 4) { hitPlayer(g, b.damage); b.life = 0; }
+      if (b.at) {
+        const convoy = g.friendlies.find(f => f.id === b.at);
+        if (convoy && !convoy.dead && distance(b, convoy) < 3.6) { damageFriendly(g, convoy, b.damage); b.life = 0; }
+      } else if (distance(b, p) < 3 && Math.abs(b.y - p.y) < 4) { hitPlayer(g, b.damage); b.life = 0; }
     } else {
       for (const e of g.enemies) {
         if (e.dead) continue;
@@ -303,25 +514,5 @@ export function update(g, input, dt) {
     if (b.y < 0.4) { if (b.weapon > 0) emit(g, 'splash', { x: b.x, y: 0.5, z: b.z }); b.life = 0; }
   }
 
-  if (g.stage === 0 && g.enemies.find(e => e.id === 'coastal-radar').dead) {
-    g.stage = 1; g.score += 600;
-    radio(g, 'Radar down. Four engineers are trapped upriver. Clear their compound, then winch them out.', 'KESTREL', 9);
-    emit(g, 'objective', { stage: 1 });
-  }
-  if (g.stage === 1 && g.rescued === 4) {
-    g.stage = 2; g.launchTimer = 300;
-    radio(g, 'All four aboard! They gave us the launch codes. Break both power nodes, then destroy the Storm battery. Five minutes.', 'KESTREL', 10);
-    emit(g, 'objective', { stage: 2 });
-  }
-  if (g.stage === 2) {
-    const command = g.enemies.find(e => e.id === 'storm-command');
-    if (command.dead) {
-      g.stage = 3; g.score += 1000;
-      radio(g, 'Beautiful hit, Hawk. The launch is dead. Bring our people back to the carrier.', 'KESTREL', 9);
-      emit(g, 'objective', { stage: 3 });
-    } else {
-      g.launchTimer = Math.max(0, g.launchTimer - dt);
-      if (g.launchTimer <= 0) fail(g, 'LAUNCH NOT PREVENTED', 'The Storm battery fired. Destroy the two power nodes first, then hit the central launcher with seekers.');
-    }
-  }
+  advanceObjectives(g, dt);
 }

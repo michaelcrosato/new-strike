@@ -7,7 +7,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs",
-    "test": "node --test tests/core.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/campaign.test.mjs",
     "verify": "node tests/browser.mjs"
   },
   "dependencies": {

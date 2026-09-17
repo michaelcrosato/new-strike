@@ -1,15 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BASE, DEPOT, CAMP, randomGenerator, distance } from './core.js';
-
-export const ISLANDS = [
-  [[-127, 65], [-124, 35], [-108, 7], [-94, -7], [-62, -26], [-32, -19], [-12, 4], [-14, 34], [-26, 65], [-55, 82], [-88, 89], [-115, 80]],
-  [[-30, -27], [-37, -49], [-19, -79], [4, -91], [28, -99], [48, -86], [63, -72], [61, -37], [48, -15], [18, -7], [-5, -17]],
-  [[62, -107], [86, -123], [116, -120], [139, -103], [145, -75], [131, -44], [109, -27], [84, -33], [70, -52], [64, -79]],
-  [[25, 28], [42, 9], [69, 3], [102, 10], [119, 33], [128, 58], [113, 77], [88, 85], [60, 71], [38, 62]],
-  [[-121, -81], [-112, -102], [-95, -108], [-79, -96], [-83, -73], [-106, -67]],
-  [[-18, 106], [-7, 96], [11, 100], [21, 119], [8, 133], [-12, 127]],
-];
+import { randomGenerator, distance } from './core.js';
 export function inPolygon(x, z, polygon) {
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
@@ -20,7 +11,6 @@ export function inPolygon(x, z, polygon) {
 }
 
 const PI = Math.PI;
-const rand = randomGenerator(818);
 const palettes = {
   grass: 0x557749, grass2: 0x74934f, grass3: 0x64844d, grassDark: 0x405d3f,
   sand: 0xc2b689, cliff: 0x827d5c, deepCliff: 0x576658,
@@ -29,10 +19,12 @@ const palettes = {
   trunk: 0x655b3a, palm: 0x3c694b, palmLight: 0x598257, palmTop: 0x749455,
   steel: 0x71847e, black: 0x20322f, glass: 0x173b4a, red: 0xa84e3b,
   airframe: 0x34564b, airframeLight: 0x527566,
+  paperLight: 0xdfe3cb, escort: 0xa9c4b2,
 };
 
 export class World {
   constructor(scene, game) {
+    this.level = game.level; this.rand = randomGenerator(game.level.seed);
     this.scene = scene; this.dynamic = new THREE.Group(); this.static = new THREE.Group();
     scene.add(this.static, this.dynamic);
     this.materials = {}; this.geometries = {}; this.enemies = new Map(); this.rotating = [];
@@ -45,11 +37,16 @@ export class World {
     this.materials.glow = new THREE.MeshStandardMaterial({ color: 0xffb84b, emissive: 0xff9600, emissiveIntensity: 2.3 });
     this.materials.cyan = new THREE.MeshStandardMaterial({ color: 0x81edd0, emissive: 0x32cbaa, emissiveIntensity: 1.1 });
     this.materials.enemyGlow = new THREE.MeshStandardMaterial({ color: 0xff8156, emissive: 0xff3105, emissiveIntensity: 1.9 });
-    this.makeTerrain(); this.makeStructures(); this.scatterNature(); this.makeCarrier();
-    this.makePad(DEPOT.x, DEPOT.z, 7.6, 'F', false);
-    this.makeRescue(); this.mergeStatic();
+    const level = this.level;
+    this.makeTerrain(level);
+    level.build(this);
+    this.scatterNature(level);
+    this.makePad(level.base);
+    for (const depot of level.depots) this.makePad(depot);
+    this.makeRescue(level); this.mergeStatic();
     this.heli = this.makeHelicopter(); this.dynamic.add(this.heli);
-    this.makeEnemies(game); this.mergeModels(); this.makeMarkers(); this.makeParticles(); this.makeBirds();
+    this.makeEnemies(game); this.makeFriendlies(game); this.mergeModels();
+    this.makeMarkers(); this.makeParticles(); this.makeBirds();
     this.reset(game);
   }
   mat(m) { return typeof m === 'string' ? this.materials[m] : m; }
@@ -74,7 +71,8 @@ export class World {
     geo.rotateX(-PI / 2); geo.translate(0, base, 0);
     return this.mesh(geo, material);
   }
-  makeTerrain() {
+  makeTerrain(level) {
+    const rand = this.rand;
     // Physical water with world-space moving micro-normal waves and glancing highlights.
     this.waterMaterial = new THREE.MeshStandardMaterial({ color: 0x126c70, roughness: .24, metalness: .33 });
     this.waterTime = { value: 0 };
@@ -96,8 +94,8 @@ export class World {
     this.water = water;
     const shallows = new THREE.MeshStandardMaterial({ color: 0x469387, roughness: .42, metalness: .18 });
     const foam = new THREE.MeshStandardMaterial({ color: 0x81aa98, roughness: .5 });
-    for (let i = 0; i < ISLANDS.length; i++) {
-      const poly = ISLANDS[i];
+    for (let i = 0; i < level.islands.length; i++) {
+      const poly = level.islands[i];
       this.slab(poly, -.1, .16, shallows, 1.11);
       this.slab(poly, .02, .18, foam, 1.035);
       this.slab(poly, .05, .73, 'sand', 1.0);
@@ -113,8 +111,7 @@ export class World {
       }
     }
     // Stepped jungle ridges at the backs of the operational islands.
-    const ridges = [[-103, 3, 15, 16], [-102, -2, 8, 10], [-90, -10, 13, 10], [2, -86, 13, 9], [35, -83, 14, 10], [128, -102, 11, 9], [122, -111, 12, 8], [-97, -91, 13, 13], [56, 26, 13, 9], [103, 64, 12, 9]];
-    for (const [x,z,r,h] of ridges) {
+    for (const [x,z,r,h] of level.ridges ?? []) {
       this.obstacles.push({ x, z, w:r*2, d:r*2, top:2.5+h });
       for (let k = 0; k < 3; k++) {
         const rock = this.cylinder(x, 2.5 + h * .15 + k * h * .23, z, r * (1-k*.24), r*(1.08-k*.24), h*.34, k===2 ? 'grassDark' : 'cliff', 5);
@@ -122,9 +119,10 @@ export class World {
       }
     }
     // Shallow rocks and sand bars make the delta read as terrain from above.
-    for (let i = 0; i < 34; i++) {
-      const x = -154 + rand()*308, z = -146 + rand()*286;
-      if (ISLANDS.some(p=>inPolygon(x,z,p)) || distance({x,z},BASE)<24) continue;
+    const rocks = level.rocks ?? { count: 0, x: [0,0], z: [0,0] };
+    for (let i = 0; i < rocks.count; i++) {
+      const x = rocks.x[0] + rand()*(rocks.x[1]-rocks.x[0]), z = rocks.z[0] + rand()*(rocks.z[1]-rocks.z[0]);
+      if (level.islands.some(p=>inPolygon(x,z,p)) || distance({x,z},level.base)<24) continue;
       const r = 1.5 + rand()*2.5;
       this.cylinder(x, .1, z, r*.8, r, 1.2+rand()*1.8, 'cliff', 5);
     }
@@ -164,43 +162,37 @@ export class World {
       this.box(x,y,z+k*d/2,w,.09,.09,'steel'); this.box(x+k*w/2,y,z,.09,.09,d,'steel');
     }
   }
-  makeStructures() {
-    this.road([-99,61],[-64,35]); this.road([-64,35],[-32,-5]);
-    this.road([-12,-23],[19,-59]); this.road([19,-59],[55,-65]); this.road([69,-67],[112,-77]);
-    this.road([49,46],[102,28]);
-    this.box(-66,2.79,20,26,.25,24,'asphalt');
-    this.building(-82,13,10,9,4,'concrete'); this.building(-57,7,8,6,3.8,'dark');
-    this.container(-95,37,'rust'); this.container(-96,47,'cream'); this.container(-37,29,'roof');
-    this.fence(-67,20,31,30);
-    this.building(6,-59,16,7,4.2,'concrete','roofLight'); this.building(25,-40,8,12,4.1,'cream','rust');
-    this.building(-5,-68,11,9,3.4,'dark'); this.container(29,-72,'rust',PI/2);
-    this.fence(9,-52,44,40);
-    this.box(10,2.75,-50,13,.15,10,'sand');
-    this.box(-8,2.7,-26,19,.16,19,'asphalt'); this.container(-21,-29,'cream'); this.container(-20,-20,'roof');
-    this.building(103,-102,12,8,5.3,'concrete'); this.building(123,-83,10,14,5,'dark');
-    this.box(99,2.74,-79,43,.16,34,'asphalt');
-    for(let z=-95;z<=-62;z+=11) this.box(123,2.86,z,5,.08,.25,'cream');
-    this.container(81,-106,'rust',PI/2); this.container(90,-106,'roof',PI/2);
-    // A concrete river bridge, with supports, crash barriers and lamps.
-    this.box(64,3.1,-66,23,1.1,8,'concrete'); this.box(64,3.7,-66,23,.12,6.8,'asphalt');
-    for(const z of [-70,-62]) {this.box(64,4.25,z,24,.7,.5,'cream');}
-    for(const x of [57,66,74]) {this.box(x,1.5,-66,2,3,6,'cliff'); this.box(x,3.8,-66,2,.04,.2,'cream');}
-    // The harbor is an optional supply and combat diversion.
-    this.box(91,1.7,85,42,1,19,'concrete'); this.box(106,1.5,99,9,1,25,'concrete');
-    this.building(78,55,18,17,7,'cream','roof'); this.building(101,36,13,14,6,'concrete','rust');
-    for(const [x,z,c] of [[61,54,'rust'],[58,41,'roof'],[97,62,'rust'],[106,69,'cream'],[89,68,'roof']]) this.container(x,z,c,PI/2);
-    this.crane(112,70); this.crane(77,76);
-    for(const [x,z] of [[-50,61],[-87,59],[38,-23],[111,-39],[49,22]]) {
-      this.building(x,z,6,7,3.2,'cream','rust'); this.building(x+8,z+2,5,6,2.7,'concrete');
-    }
-    // Solar fields and aerials ground the setting in a near future.
-    for(let x=85;x<112;x+=8) for(let z=-43;z<-34;z+=5) {
+  // Reusable set pieces the level scripts compose.
+  bridge(x, z, span = 23) {
+    this.box(x,3.1,z,span,1.1,8,'concrete'); this.box(x,3.7,z,span,.12,6.8,'asphalt');
+    for(const dz of [z-4,z+4]) this.box(x,4.25,dz,span+1,.7,.5,'cream');
+    for(const dx of [x-7,x+2,x+10]) {this.box(dx,1.5,z,2,3,6,'cliff'); this.box(dx,3.8,z,2,.04,.2,'cream');}
+  }
+  solarField(x1, z1, x2, z2) {
+    for(let x=x1;x<x2;x+=8) for(let z=z1;z<z2;z+=5) {
       this.box(x,3.4,z,.3,1.6,.3,'steel'); const panel=this.box(x,4.2,z,6,.15,3,'glass'); panel.rotation.x=-.28;
       this.box(x,4.25,z,.1,.18,3,'steel');
     }
-    for(const [x,z] of [[-54,12],[21,-61],[112,-102]]) {
-      this.rod([x,3,z],[x,15,z],.17,'steel'); this.box(x,13,z,3,.2,.2,'steel'); this.box(x,15.1,z,.35,.3,.35,'enemyGlow');
-    }
+  }
+  aerial(x, z) {
+    this.rod([x,3,z],[x,15,z],.17,'steel'); this.box(x,13,z,3,.2,.2,'steel'); this.box(x,15.1,z,.35,.3,.35,'enemyGlow');
+  }
+  silo(x, z) {
+    this.cylinder(x,6,z,5.5,6.5,12,'concrete',10); this.cylinder(x,12.4,z,5.8,5.8,1.2,'steel',10);
+    for(const a of [0,PI/2,PI,PI*1.5]) this.box(x+Math.sin(a)*7,3.2,z+Math.cos(a)*7,2.4,1.2,2.4,'dark');
+    this.obstacles.push({x,z,w:16,d:16,top:16});
+  }
+  hangar(x, z, w = 22, d = 16) {
+    this.box(x,2.9,z,w,.3,d,'asphalt');
+    this.cylinder(x,3+d*.28,z,d*.5,d*.5,w,'roof',12).rotation.z=PI/2;
+    this.box(x,3.1,z-d*.5,w*.92,4.4,.4,'dark'); this.box(x,3.1,z+d*.5,w*.92,4.4,.4,'dark');
+    this.obstacles.push({x,z,w,d,top:d*.5+4});
+  }
+  oilRig(x, z) {
+    for(const dx of [-9,9]) for(const dz of [-9,9]) this.rod([x+dx,0,z+dz],[x+dx*.55,12,z+dz*.55],.6,'rust');
+    this.box(x,12.6,z,26,1.2,26,'steel'); this.box(x-5,15.6,z-4,11,5,9,'cream');
+    this.rod([x+7,13,z+6],[x+7,30,z+6],.7,'rust'); this.box(x+7,30.4,z+6,2.4,1.6,2.4,'enemyGlow');
+    this.obstacles.push({x,z,w:28,d:28,top:19});
   }
   crane(x,z) {
     this.obstacles.push({x:x+3,z,w:15,d:3,top:18});
@@ -209,8 +201,9 @@ export class World {
     this.box(x+9,5,z,1,.5,1,'black'); this.box(x-1.5,14.5,z,3,3,3,'cream');
   }
   palm(x,z,s=1) {
+    const rand=this.rand;
     const g=new THREE.Group(); g.position.set(x,2.6,z); g.rotation.y=rand()*PI*2; g.scale.setScalar(s); this.static.add(g);
-    const lean = (rand()-.5)*1.3;
+    const lean = (this.rand()-.5)*1.3;
     for(let i=0;i<4;i++) {
       const b=this.cylinder(lean*i*.3,i*1.7+.85,0,.23-i*.025,.32-i*.023,1.75,'trunk',5,g); b.rotation.z=-lean*.12;
       this.cylinder(lean*i*.3,i*1.7+.1,0,.34-i*.023,.34-i*.023,.13,'cliff',6,g);
@@ -227,13 +220,14 @@ export class World {
       this.mesh(geo,i%3===0?'palmTopFrond':i%2?'palmLightFrond':'palmFrond',lean,0,0,g);
     }
   }
-  scatterNature() {
-    const exclusion = [BASE,DEPOT,CAMP,{x:-66,z:20},{x:99,z:-79},{x:80,z:53}];
-    for(let i=0;i<560;i++) {
-      const x=rand()*290-145,z=rand()*255-125;
-      if(!ISLANDS.some(p=>inPolygon(x,z,p)) || exclusion.some(p=>distance({x,z},p)<23)) continue;
-      // Spare the main roads and bridge approach.
-      if((Math.abs(x+z+30)<9 && x<0 && z>0) || (z>-74&&z<-57&&x>-10&&x<115)) continue;
+  scatterNature(level) {
+    const rand = this.rand, scatter = level.scatter ?? { count: 0, x: [0,0], z: [0,0] };
+    // Keep growth off the pads, the objectives and any lane the level marks as clear.
+    const exclusion = [level.base, ...level.depots, ...Object.values(level.zones ?? {}), ...(level.clearings ?? [])];
+    for(let i=0;i<scatter.count;i++) {
+      const x=scatter.x[0]+rand()*(scatter.x[1]-scatter.x[0]),z=scatter.z[0]+rand()*(scatter.z[1]-scatter.z[0]);
+      if(!level.islands.some(p=>inPolygon(x,z,p)) || exclusion.some(p=>distance({x,z},p)<(p.clear ?? 23))) continue;
+      if(level.spare?.(x,z)) continue;   // roads, runways and approaches the level keeps clear
       if(rand()>.32) this.palm(x,z,.65+rand()*.65);
       else {
         for(let j=0;j<3;j++) this.cylinder(x+j*.8,3.4+rand(),z+j*.6,1.1,2.3,2+rand()*2,j%2?'grassDark':'palm',5);
@@ -245,7 +239,8 @@ export class World {
     ctx.fillStyle='#d2d8b7';ctx.font='900 160px "Barlow Condensed",Impact,sans-serif';
     ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(letter,128,137);
   }
-  makePad(x,z,r,letter,carrier) {
+  makePad(pad) {
+    const { x, z, letter = 'H', carrier = false } = pad, r = pad.pad ?? pad.radius;
     const y=carrier?2.52:2.88;
     this.box(x,y-.09,z,r*2,.17,r*2,'dark');
     const circle=this.mesh(new THREE.RingGeometry(r*.73,r*.78,48),'cream',x,y+.02,z); circle.rotation.x=-PI/2;circle.castShadow=false;
@@ -260,11 +255,9 @@ export class World {
     const text=this.mesh(new THREE.PlaneGeometry(r*1.4,r*1.4),mat,x,y+.04,z);text.rotation.x=-PI/2;text.castShadow=false;
     for(const a of [0,PI/2,PI,PI*1.5]) this.box(x+Math.cos(a)*r*.95,y+.07,z+Math.sin(a)*r*.95,.8,.2,.8,'cyan');
   }
-  makeCarrier() {
-    const x=BASE.x,z=BASE.z;
+  carrier(x, z) {
     const poly=[[x-14,z+29],[x+14,z+29],[x+14,z-27],[x+7,z-34],[x-12,z-34]];
     this.slab(poly,-1.6,3,'dark'); this.slab(poly,1.4,1,'concrete');this.slab(poly,2.3,.18,'asphalt',.97);
-    this.makePad(x,z,11,'H',true);
     for(const dx of [-12,12]) for(let dz=-23;dz<26;dz+=4) this.box(x+dx,2.57,z+dz,.4,.08,2.1,'cream');
     this.box(x-8,5,z+17,7,5,11,'concrete'); this.box(x-8,8,z+16,6,1.4,7,'dark');
     this.box(x-7,9,z+17,7,.3,8,'roofLight');this.box(x-8,7.9,z+12.4,5,.8,.12,'glass');
@@ -279,17 +272,27 @@ export class World {
       for(let i=0;i<3;i++) this.cylinder(x+dx-1+i,3.9,z-29,.3,.3,1.3,'dark',6);
     }
   }
-  makeRescue() {
-    this.people=[];
-    for(let i=0;i<4;i++) {
-      const p=new THREE.Group();this.dynamic.add(p);p.position.set(CAMP.x-3+i*2,2.75,CAMP.z);
-      this.box(0,.8,0,.65,1.1,.55,'orange',p);this.box(0,1.65,0,.55,.55,.55,'cream',p);
-      this.box(-.2,.23,0,.2,.55,.25,'dark',p);this.box(.2,.23,0,.2,.55,.25,'dark',p);
-      const arm=this.box(-.5,1.1,0,.2,.8,.23,'orange',p);arm.rotation.z=-.6;
-      p.userData.home=p.position.clone();
-      this.mergeGroup(p);
-      this.people.push(p);
-    }
+  // One waiting group per rescue objective, so a level can stage several pickups.
+  makeRescue(level) {
+    this.people=[];this.rescueGroups=[];
+    level.objectives.forEach((objective,stage)=>{
+      if(objective.kind!=='rescue')return;
+      const zone=level.zones[objective.zone],people=[];
+      for(let i=0;i<objective.count;i++) {
+        const p=this.person(zone.x-(objective.count-1)+i*2,zone.z,objective.colour ?? 'orange');
+        p.userData.stage=stage;people.push(p);this.people.push(p);
+      }
+      this.rescueGroups.push({stage,zone,people});
+    });
+  }
+  person(x,z,colour='orange') {
+    const p=new THREE.Group();this.dynamic.add(p);p.position.set(x,2.75,z);
+    this.box(0,.8,0,.65,1.1,.55,colour,p);this.box(0,1.65,0,.55,.55,.55,'cream',p);
+    this.box(-.2,.23,0,.2,.55,.25,'dark',p);this.box(.2,.23,0,.2,.55,.25,'dark',p);
+    const arm=this.box(-.5,1.1,0,.2,.8,.23,colour,p);arm.rotation.z=-.6;
+    p.userData.home=p.position.clone();
+    this.mergeGroup(p);
+    return p;
   }
   makeHelicopter() {
     const g=new THREE.Group();const body=new THREE.Group();g.add(body);this.heliBody=body;
@@ -345,6 +348,7 @@ export class World {
     return g;
   }
   makeEnemies(game) {
+    this.tallEnemies=game.enemies.filter(e=>e.type==='radar').map(e=>e.id);
     for(const e of game.enemies) {
       const g=new THREE.Group();this.dynamic.add(g);g.position.set(e.x,e.y,e.z);this.enemies.set(e.id,g);
       if(e.type==='radar') {
@@ -367,6 +371,28 @@ export class World {
         this.box(0,0,0,6,1,6,'dark',g);this.box(0,1,0,4,2,4,'steel',g);
         for(const x of [-1.4,1.4]) {this.cylinder(x,2.4,0,.65,.65,3,'dark',8,g);this.cylinder(x,3,0,.7,.7,.5,'cyan',8,g);}
         this.box(0,1.3,-2.1,2,.65,.1,'cyan',g);
+      } else if(e.type==='silo') {
+        this.box(0,-.4,0,16,1.2,16,'dark',g);
+        this.cylinder(0,5.2,0,5.2,6.2,11,'concrete',10,g);this.cylinder(0,11,0,5.5,5.5,1.1,'steel',10,g);
+        this.cylinder(0,12.4,0,2.2,3.4,2.4,'cream',10,g);
+        for(const a of [0,PI/2,PI,PI*1.5]) {this.box(Math.sin(a)*7.4,1.2,Math.cos(a)*7.4,2.6,1.6,2.6,'steel',g);this.box(Math.sin(a)*7.4,2.2,Math.cos(a)*7.4,1.2,.5,1.2,'enemyGlow',g);}
+      } else if(e.type==='bridge') {
+        this.box(0,1.2,0,28,1.4,9,'concrete',g);this.box(0,2.1,0,28,.14,7.6,'asphalt',g);
+        for(const dz of [-4.4,4.4]) this.box(0,2.8,dz,28,.8,.5,'cream',g);
+        for(const dx of [-10,0,10]) {this.box(dx,-1.4,0,2.4,4,7,'cliff',g);this.box(dx,2.3,0,2.2,.06,.24,'cream',g);}
+        this.box(0,3.1,-4.6,1.2,1.6,.3,'enemyGlow',g);
+      } else if(e.type==='fueltank') {
+        this.cylinder(0,1.6,0,2.4,2.6,3.4,'rust',12,g);this.cylinder(0,3.5,0,2.5,2.5,.4,'steel',12,g);
+        this.box(0,.9,-2.7,1.6,.5,.12,'orange',g);this.rod([0,3.4,0],[0,5.2,0],.12,'steel',g);
+      } else if(e.type==='officer') {
+        this.box(0,.85,0,.68,1.15,.58,'dark',g);this.box(0,1.7,0,.56,.56,.56,'cream',g);
+        this.box(-.2,.25,0,.2,.6,.26,'black',g);this.box(.2,.25,0,.2,.6,.26,'black',g);
+        this.box(0,1.28,-.34,.5,.4,.14,'enemyGlow',g);
+      } else if(e.type==='truck') {
+        this.box(0,1,0,3,1.7,7,'rust',g);this.box(0,2.05,0,2.8,.4,6.6,'dark',g);
+        this.box(0,1.1,-3.9,2.7,1.6,1.5,'dark',g);this.box(0,1.45,-4.7,2.2,.85,.12,'glass',g);
+        for(const dx of [-1.5,1.5]) for(const dz of [-3,1.2,2.8]) this.cylinder(dx,.2,dz,.58,.58,.4,'black',10,g).rotation.z=PI/2;
+        this.box(0,.4,-4.8,1.5,.3,.2,'enemyGlow',g);
       } else if(e.type==='crate') {
         for(const x of [-1,1]) this.cylinder(x,0,0,.9,.9,2.6,'rust',8,g);
         this.box(0,.7,-1,3,.3,.08,'orange',g);
@@ -397,6 +423,30 @@ export class World {
       this.mergeGroup(group);
       if (turret) this.mergeGroup(turret);
       if (dish) this.mergeGroup(dish);
+    }
+  }
+  // Friendly vehicles: same construction language, paper and cyan instead of rust.
+  makeFriendlies(game) {
+    this.friendlies=new Map();
+    for(const f of game.friendlies) {
+      const g=new THREE.Group();this.dynamic.add(g);g.position.set(f.x,f.y,f.z);this.friendlies.set(f.id,g);
+      if(f.type==='boat') {
+        this.box(0,-.2,0,3.3,1.2,8,'cream',g);this.box(0,.7,1.4,2.5,1.5,2.5,'paperLight',g);this.box(0,1.5,1,2.5,.5,2,'glass',g);
+        this.box(0,1.1,-2.6,1.2,.35,.12,'cyan',g);
+      } else if(f.type==='bus') {
+        this.box(0,1.3,0,3.4,2.6,10,'cream',g);this.box(0,2.75,0,3.1,.4,9.2,'paperLight',g);
+        for(let dz=-3.6;dz<4;dz+=1.8) this.box(1.72,1.7,dz,.08,1.1,1.2,'glass',g);
+        for(let dz=-3.6;dz<4;dz+=1.8) this.box(-1.72,1.7,dz,.08,1.1,1.2,'glass',g);
+        this.box(0,1.9,-5.05,2.6,1.3,.12,'glass',g);
+        for(const dx of [-1.5,1.5]) for(const dz of [-3.4,3.4]) this.cylinder(dx,.2,dz,.55,.55,.4,'black',10,g).rotation.z=PI/2;
+        this.box(0,.35,-5.1,1.4,.3,.2,'cyan',g);
+      } else {
+        this.box(0,1,0,3.2,1.8,7.4,'cream',g);this.box(0,2.1,0,3,.4,7,'paperLight',g);
+        this.box(0,1.15,-4.1,2.9,1.7,1.6,'paperLight',g);this.box(0,1.5,-4.95,2.4,.9,.12,'glass',g);
+        for(const dx of [-1.55,1.55]) for(const dz of [-3.2,1.3,2.9]) this.cylinder(dx,.2,dz,.6,.6,.42,'black',10,g).rotation.z=PI/2;
+        this.box(0,.4,-5.05,1.6,.3,.2,'cyan',g);
+      }
+      this.mergeGroup(g);
     }
   }
   makeMarkers() {
@@ -487,10 +537,25 @@ export class World {
       if(!buckets.has(key)) buckets.set(key,{material:obj.material,shadow:obj.castShadow,geos:[]});
       buckets.get(key).geos.push(this.bakedGeometry(obj,obj.matrixWorld));
     });
+    this.preserved=preserve;
     for(const obj of preserve) this.scene.attach(obj);
     const old=this.static;this.static=new THREE.Group();this.scene.add(this.static);
     for (const bucket of buckets.values()) this.static.add(this.buildMerged(bucket));
     this.scene.remove(old);old.traverse(o=>{if(o.isMesh)o.geometry.dispose();});
+  }
+  // Releases every buffer this level allocated, so switching operations does not leak.
+  dispose() {
+    const materials=new Set();
+    const purge=root=>{
+      root.traverse(o=>{
+        if(o.geometry)o.geometry.dispose();
+        if(o.material)for(const m of Array.isArray(o.material)?o.material:[o.material])materials.add(m);
+      });
+      root.removeFromParent();
+    };
+    purge(this.static);purge(this.dynamic);
+    for(const obj of this.preserved ?? [])purge(obj);
+    for(const m of materials){for(const key of ['map','emissiveMap','normalMap'])m[key]?.dispose();m.dispose();}
   }
   makeParticles() {
     const geo=new THREE.IcosahedronGeometry(1,0);
@@ -501,10 +566,12 @@ export class World {
     this.flash=new THREE.PointLight(0xffa445,0,32,2);this.dynamic.add(this.flash);
   }
   spawnParticle(x,y,z,vx,vy,vz,size,color,life=1.2,type='debris') {
+    const rand=this.rand;
     if(this.particles.length>=350) this.particles.shift();
     this.particles.push({x,y,z,vx,vy,vz,size,color,life,maxLife:life,type,r:rand()*6});
   }
   explosion(x,y,z,size=1) {
+    const rand=this.rand;
     for(let i=0;i<25*size;i++) {
       const a=rand()*PI*2,s=rand()*12*size;
       this.spawnParticle(x,y+1,z,Math.sin(a)*s,rand()*14*size,Math.cos(a)*s,(.15+rand()*.7)*size,i%4===0?0xffd582:i%3===0?0xe88b42:0x3d4c44, .7+rand()*1.5);
@@ -528,10 +595,11 @@ export class World {
   flightHeight(x,z) {
     let top=2.7;
     for(const obstacle of this.obstacles) if(Math.abs(x-obstacle.x)<obstacle.w*.5+5&&Math.abs(z-obstacle.z)<obstacle.d*.5+5)top=Math.max(top,obstacle.top);
-    for(const [id,mesh] of this.enemies) if(id==='coastal-radar'&&mesh.scale.y>.5&&Math.hypot(x-mesh.position.x,z-mesh.position.z)<12)top=Math.max(top,16);
+    for(const id of this.tallEnemies){const mesh=this.enemies.get(id);if(mesh&&mesh.scale.y>.5&&Math.hypot(x-mesh.position.x,z-mesh.position.z)<12)top=Math.max(top,16);}
     return top+6.3;
   }
   handle(event) {
+    const rand=this.rand;
     const {x,y,z}=event;
     if(event.type==='explosion') {
       this.explosion(x,y,z,event.size);
@@ -540,12 +608,14 @@ export class World {
         this.smoking.push({x,y:3,z,t:0});
       }
     }
+    if(event.type==='capture'){const model=this.enemies.get(event.id);if(model)model.visible=false;}
     if(event.type==='hit') for(let i=0;i<4;i++)this.spawnParticle(x,y,z,(rand()-.5)*8,2+rand()*4,(rand()-.5)*8,.12,0xffc982,.3+rand()*.4);
     if(event.type==='shot' && event.weapon>0)for(let i=0;i<3;i++)this.spawnParticle(x,y,z,(rand()-.5)*2,1,(rand()-.5)*2,.25,0xddd6b5,.5,'smoke');
     if(event.type==='flares')for(let i=0;i<20;i++){const a=i*PI*2/20;this.spawnParticle(x,y,z,Math.sin(a)*8,2,Math.cos(a)*8,.18,0xffebb3,1.5);}
     if(event.type==='splash')for(let i=0;i<10;i++)this.spawnParticle(x,y,z,(rand()-.5)*7,rand()*7,(rand()-.5)*7,.2,0xacc8b2,.8);
   }
   update(game,dt,time,obj,interacting) {
+    const rand=this.rand;
     const p=game.p;this.waterTime.value=time;
     this.heli.position.set(p.x,p.y+Math.sin(time*2.1)*.12,p.z);this.heli.rotation.y=p.yaw;
     this.heli.visible=game.phase!=='failed';
@@ -554,9 +624,9 @@ export class World {
     this.heliBody.rotation.z=THREE.MathUtils.damp(this.heliBody.rotation.z,-sideSpeed*.012,7,dt);
     this.rotor.rotation.y=time*39;this.tailRotor.rotation.x=time*52;
     for(const object of this.rotating)object.rotation.y+=dt*.7;
-    this.winch.visible=game.stage===1 && game.rescue>0;
+    this.winch.visible=game.rescue>0;
     if(this.winch.visible){this.winch.geometry.attributes.position.array[4]=-(p.y-2.8)/.9;this.winch.geometry.attributes.position.needsUpdate=true;}
-    this.wash.position.set(p.x,ISLANDS.some(poly=>inPolygon(p.x,p.z,poly))?2.81:.1,p.z);this.wash.rotation.z=time*.3;
+    this.wash.position.set(p.x,this.level.islands.some(poly=>inPolygon(p.x,p.z,poly))?2.81:.1,p.z);this.wash.rotation.z=time*.3;
     this.wash.material.opacity=interacting?.18:.06;this.wash.scale.setScalar(.94+Math.sin(time*6)*.06);
     this.marker.position.set(obj.x,3.05,obj.z);this.marker.rotation.y=time*.12;
     this.beacon.material.opacity=.14+Math.sin(time*3)*.055;
@@ -566,12 +636,20 @@ export class World {
       if(e.patrol)model.rotation.y=e.yaw;
       if(model.userData.turret)model.userData.turret.rotation.y=Math.atan2(p.x-e.x,-(p.z-e.z))-model.rotation.y;
     }
-    for(let i=0;i<this.people.length;i++){
-      const person=this.people[i];person.visible=i>=game.rescued;person.rotation.y=Math.sin(time*2+i)*.2;person.position.copy(person.userData.home);
-      if(i===game.rescued&&game.rescue>0){
-        const approach=Math.min(1,game.rescue/.3),lift=THREE.MathUtils.clamp((game.rescue-.3)/1.3,0,1);
-        person.position.x=THREE.MathUtils.lerp(person.userData.home.x,p.x,approach);person.position.z=THREE.MathUtils.lerp(person.userData.home.z,p.z,approach);person.position.y=2.75+lift*(p.y-2.75);
+    for(const group of this.rescueGroups){
+      for(let i=0;i<group.people.length;i++){
+        const person=group.people[i];
+        person.visible=game.stage<group.stage||(game.stage===group.stage&&i>=game.rescued);
+        person.rotation.y=Math.sin(time*2+i)*.2;person.position.copy(person.userData.home);
+        if(game.stage===group.stage&&i===game.rescued&&game.rescue>0){
+          const approach=Math.min(1,game.rescue/.3),lift=THREE.MathUtils.clamp((game.rescue-.3)/1.3,0,1);
+          person.position.x=THREE.MathUtils.lerp(person.userData.home.x,p.x,approach);person.position.z=THREE.MathUtils.lerp(person.userData.home.z,p.z,approach);person.position.y=2.75+lift*(p.y-2.75);
+        }
       }
+    }
+    for(const f of game.friendlies){
+      const model=this.friendlies.get(f.id);if(!model)continue;
+      model.visible=!f.dead;model.position.set(f.x,f.y,f.z);model.rotation.y=f.yaw;
     }
     for(const fire of this.smoking) {
       fire.t+=dt;
