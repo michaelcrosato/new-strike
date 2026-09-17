@@ -272,3 +272,12 @@ test('the whole loop runs for thirty days without going wrong', () => {
   assert.ok(p.completed.length > 15, `${p.completed.length} jobs completed`);
   assert.ok(p.ledger.length >= 25, 'the books are kept');
 });
+
+test('Quill counts jobs in English', () => {
+  // It read "1 jobs done" on screen, which is the sort of thing you only notice by looking.
+  const p = createProfile();
+  p.completed.push('c1');
+  assert.match(situation(p), /^1 job done\./);
+  p.completed.push('c2');
+  assert.match(situation(p), /^2 jobs done\./);
+});

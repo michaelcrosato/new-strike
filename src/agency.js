@@ -348,5 +348,6 @@ export function situation(profile) {
   if (worst[1] <= -45) return `${name(worst[0])} will shoot at you now. Stay out of their ground or make it worth it.`;
   if (best[1] >= 48) return `${name(best[0])} trusts you. That is worth more than the money, and it costs you ${name(worst[0])}.`;
   if (!profile.completed.length) return 'Nothing on the board is beneath us yet. Pick one and fly it.';
-  return `${profile.completed.length} jobs done. Nobody loves us, nobody is shooting. Fix that in whichever direction pays.`;
+  const done = profile.completed.length;
+  return `${done} job${done === 1 ? '' : 's'} done. Nobody loves us, nobody is shooting. Fix that in whichever direction pays.`;
 }

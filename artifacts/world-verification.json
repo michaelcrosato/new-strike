@@ -50,7 +50,7 @@
       "draw": 85,
       "drawn": 43285,
       "fps": 60,
-      "streamMs": 0.02,
+      "streamMs": 0.01,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -69,7 +69,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 56.6
+        "ms": 54.8
       },
       "mapMs": 0,
       "cameraClearance": 156.6
@@ -237,7 +237,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 56.6
+        "ms": 54.8
       }
     },
     "pokeThrough": {
@@ -247,7 +247,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 111,
+      "ms": 110,
       "sameTwice": true
     },
     "briefs": {
@@ -265,7 +265,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.088435618300487
+      "paidOut": 1.8154001245688125
     },
     "job": {
       "cash": 5000,
@@ -297,7 +297,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0.03,
+      "worst": 0,
       "resident": 35,
       "nodes": 7255
     }

@@ -10,7 +10,7 @@ the twelve kinds of job you fly.
 
 ```powershell
 npm run world          # builds the game and serves it
-npm test               # 124 checks across seven suites
+npm test               # 125 checks across seven suites
 npm run verify:world   # 17 browser checks against the built bundle (server must be running)
 ```
 
@@ -352,7 +352,7 @@ at this scale, but a larger region would want it.
 
 ## Verification
 
-- **124 module checks** across seven suites: the campaign parity harness, the campaign
+- **125 module checks** across seven suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
   layer with its landmarks and place names, and the newer four kinds with their complications.
 - **17 browser checks** (`npm run verify:world`) against the built single file served at the
