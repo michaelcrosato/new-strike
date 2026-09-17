@@ -10,6 +10,7 @@
     "The coarse region mesh hangs below the streamed terrain instead of through it",
     "The region map draws inside a frame budget and repaints cleanly",
     "The region map and the yard open, draw and close on real key presses",
+    "The region map pans and zooms through five steps, redrawing the terrain at each scale",
     "All twelve kinds of work reach the board and brief the pilot",
     "Holding the winch key lowers a visible cable and hook, and releasing raises it",
     "A contract can be flown to completion for money on the built bundle",
@@ -50,7 +51,7 @@
       "draw": 85,
       "drawn": 43285,
       "fps": 60,
-      "streamMs": 0.01,
+      "streamMs": 0.06,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -62,6 +63,7 @@
       "regionNodes": 6824,
       "fog": 0.00085,
       "cable": 0,
+      "projectiles": 0,
       "intro": true,
       "zoom": 1,
       "zoomStep": 1,
@@ -69,7 +71,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 54.8
+        "ms": 55.2
       },
       "mapMs": 0,
       "cameraClearance": 156.6
@@ -237,7 +239,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 54.8
+        "ms": 55.2
       }
     },
     "pokeThrough": {
@@ -247,8 +249,124 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 110,
+      "ms": 109,
       "sameTwice": true
+    },
+    "mapNavigation": {
+      "whole": {
+        "x": 0,
+        "z": 0,
+        "span": 2000,
+        "step": 0,
+        "steps": 5,
+        "spans": [
+          2000,
+          1000,
+          500,
+          250,
+          125
+        ],
+        "baseSpan": 2000,
+        "ms": 109,
+        "size": 620,
+        "redraws": 1,
+        "settled": true
+      },
+      "zoomedIn": {
+        "x": -200.8,
+        "z": -200,
+        "span": 1000,
+        "step": 1,
+        "steps": 5,
+        "spans": [
+          2000,
+          1000,
+          500,
+          250,
+          125
+        ],
+        "baseSpan": 1000,
+        "ms": 113,
+        "size": 620,
+        "redraws": 2,
+        "settled": true
+      },
+      "panned": {
+        "x": -20.1,
+        "z": -19.4,
+        "span": 1000,
+        "step": 1,
+        "steps": 5,
+        "spans": [
+          2000,
+          1000,
+          500,
+          250,
+          125
+        ],
+        "baseSpan": 1000,
+        "ms": 95,
+        "size": 620,
+        "redraws": 3,
+        "settled": true
+      },
+      "deepest": {
+        "x": -20.1,
+        "z": -19.4,
+        "span": 125,
+        "step": 4,
+        "steps": 5,
+        "spans": [
+          2000,
+          1000,
+          500,
+          250,
+          125
+        ],
+        "baseSpan": 125,
+        "ms": 123,
+        "size": 620,
+        "redraws": 4,
+        "settled": true
+      },
+      "pinned": {
+        "x": 937.5,
+        "z": 937.5,
+        "span": 125,
+        "step": 4,
+        "steps": 5,
+        "spans": [
+          2000,
+          1000,
+          500,
+          250,
+          125
+        ],
+        "baseSpan": 125,
+        "ms": 106,
+        "size": 620,
+        "redraws": 5,
+        "settled": true
+      },
+      "backToWhole": {
+        "x": 0,
+        "z": 0,
+        "span": 2000,
+        "step": 0,
+        "steps": 5,
+        "spans": [
+          2000,
+          1000,
+          500,
+          250,
+          125
+        ],
+        "baseSpan": 2000,
+        "ms": 101,
+        "size": 620,
+        "redraws": 6,
+        "settled": true
+      }
     },
     "briefs": {
       "survey": "HOLD THE SCAN OVER THE SITE",
@@ -265,7 +383,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 1.8154001245688125
+      "paidOut": 1.9365896429506486
     },
     "job": {
       "cash": 5000,

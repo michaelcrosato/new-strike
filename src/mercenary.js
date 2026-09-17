@@ -26,6 +26,35 @@ import { AudioEngine } from './audio.js';
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
+// Every button in the game acts on pointerup as well as on click.
+//
+// Chrome withholds the click of a tap that lands within about half a second of a drag: it
+// is still deciding whether the tap begins another gesture, and by the time it decides, the
+// click is gone. Measured here, a tap up to 400 ms after panning the map produced
+// pointerdown, touchstart, pointerup and touchend — and no click at all. On a phone that is
+// a button that does nothing, which is most of what made this unplayable.
+//
+// Acting on pointerup also removes the tap latency. The click path stays for keyboards and
+// for the few places that drive a button with .click(), and the two are de-duplicated so a
+// mouse does not fire both.
+function onTap(element, action) {
+  let armed = null, acted = -Infinity;
+  element.addEventListener('pointerdown', event => { if (event.button === 0) armed = event.pointerId; });
+  element.addEventListener('pointercancel', () => { armed = null; });
+  element.addEventListener('pointerup', event => {
+    const ours = armed === event.pointerId;
+    armed = null;
+    if (!ours || element.disabled) return;
+    acted = performance.now();
+    action(event);
+  });
+  element.addEventListener('click', event => {
+    // The click the browser sends straight after a pointerup we have already acted on.
+    if (element.disabled || performance.now() - acted < 600) return;
+    action(event);
+  });
+}
+
 const seed = Number(new URLSearchParams(location.search).get('seed') ?? 20492) || 20492;
 const world = createWorld(seed);
 const home = world.home;
@@ -208,7 +237,7 @@ function renderYard() {
     }).join('');
     for (const item of node.children) {
       if (!item.classList.contains('can')) continue;
-      item.addEventListener('click', () => {
+      onTap(item, () => {
         const result = purchase(profile, item.dataset.upgrade);
         flash(result.ok ? 'FITTED' : result.reason);
         if (result.ok) { rearm(combat, profile); renderWeapons(); saveProfile(); }
@@ -230,7 +259,7 @@ function renderYard() {
   ].join('');
   for (const item of crewNode.children) {
     if (!item.classList.contains('can')) continue;
-    item.addEventListener('click', () => {
+    onTap(item, () => {
       const result = hire(profile, item.dataset.hire);
       flash(result.ok ? 'HIRED' : result.reason);
       if (result.ok) saveProfile();
@@ -243,7 +272,7 @@ function toggleYard() {
   panel.hidden = !panel.hidden;
   if (!panel.hidden) renderYard();
 }
-$('yard-close').addEventListener('click', toggleYard);
+onTap($('yard-close'), toggleYard);
 
 // ---------------------------------------------------------------- the first morning
 // Arriving with no idea what anybody wants was the largest hole in the thing. This is the
@@ -272,7 +301,9 @@ function showIntro() {
   renderIntro();
   $('intro').hidden = false;
 }
-$('intro-go').addEventListener('click', () => {
+// Still reachable with .click(), which is how the keyboard and the harness dismiss it.
+onTap($('intro-go'), () => {
+  if ($('intro').hidden) return;
   $('intro').hidden = true;
   wakeAudio();
   audio.event({ type: 'radio' });
@@ -345,7 +376,7 @@ function renderBoard() {
         ? `<span class="twist">${c.complication.name}</span>` : ''}</small></li>`;
   }).join('');
   for (const item of $('board').children) {
-    item.addEventListener('click', () => takeContract(board[Number(item.dataset.index)]));
+    onTap(item, () => takeContract(board[Number(item.dataset.index)]));
   }
 }
 
@@ -391,7 +422,7 @@ function settleContract(success, reason) {
 
 function updateActive(dt) {
   if (!mission) { $('mission').hidden = true; return; }
-  stepMission(mission, { world, craft, combat, input: { interact: keys.has('KeyE') } }, dt);
+  stepMission(mission, { world, craft, combat, input: { interact: keys.has('KeyE') || touchInput.winch } }, dt);
   for (const event of mission.events) {
     if (event.type === 'aboard') flash(event.remaining ? `ABOARD · ${event.remaining} TO GO` : 'ALL ABOARD');
     if (event.type === 'scanned') flash('SCAN COMPLETE');
@@ -477,9 +508,26 @@ function wakeAudio() {
 addEventListener('keydown', wakeAudio, { once: true });
 addEventListener('pointerdown', wakeAudio, { once: true });
 
+// ---------------------------------------------------------------- input
+// A coarse pointer gets a different game. There is no keyboard to fly with, so the thumb
+// controls and the button rail come on and the key legend goes away. Everything the thumbs
+// do feeds the same flight and combat code the keyboard feeds, so there is one flight model
+// rather than two that drift apart.
+const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+document.body.classList.toggle('touch', isTouch);
+
+// What the thumbs are asking for. Read alongside `keys` by flight, combat and the winch.
+const touchInput = { x: 0, y: 0, boost: false, fire: false, winch: false, flare: false, climb: false, descend: false };
+
 let mouseFire = false;
-addEventListener('pointerdown', e => { if (e.button === 0 && $('yard').hidden && $('map-panel').hidden) mouseFire = true; });
+// Bound to the canvas, and only for a real mouse. On the window it also fired when you
+// tapped the joystick, a rail button or a weapon tile, because those are pointerdowns too.
+$('scene').addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch' || e.button !== 0 || overlayOpen()) return;
+  mouseFire = true;
+});
 addEventListener('pointerup', () => { mouseFire = false; });
+addEventListener('pointercancel', () => { mouseFire = false; });
 
 let flashUntil = 0;
 function flash(text) {
@@ -512,9 +560,12 @@ addEventListener('keydown', e => {
   }
   keys.add(e.code);
   if (e.code === 'Escape') { for (const id of ['yard', 'map-panel']) if (!$(id).hidden) $(id).hidden = true; }
-  if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.code === 'BracketLeft') zoomBy(1);
-  if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'BracketRight') zoomBy(-1);
-  if (e.code === 'Digit0' || e.code === 'Numpad0') setZoom(ZOOM_DEFAULT);
+  // With the map open the same three keys work the map's zoom instead of the camera's,
+  // which is the thing you are actually looking at.
+  const mapping = !$('map-panel').hidden;
+  if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.code === 'BracketLeft') mapping ? setMapZoom(mapStep - 1) : zoomBy(1);
+  if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'BracketRight') mapping ? setMapZoom(mapStep + 1) : zoomBy(-1);
+  if (e.code === 'Digit0' || e.code === 'Numpad0') mapping ? resetMapView() : setZoom(ZOOM_DEFAULT);
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyH') teleportHome();
   if (e.code === 'KeyG') { $('debug').classList.toggle('hidden'); $('outfit').classList.toggle('hidden'); $('hud').classList.toggle('hidden'); }
@@ -525,7 +576,7 @@ addEventListener('keydown', e => {
   }
 });
 addEventListener('keyup', e => keys.delete(e.code));
-addEventListener('blur', () => keys.clear());
+addEventListener('blur', () => { keys.clear(); mouseFire = false; releaseThumbs(); });
 
 function teleportHome() {
   craft.x = home.x; craft.z = home.z; craft.vx = 0; craft.vz = 0;
@@ -536,17 +587,24 @@ function teleportHome() {
 
 // With a panel open the aircraft holds station instead of drifting off across the region
 // while you read. Fuel, repair and the rest of the loop keep running.
-const overlayOpen = () => !$('intro').hidden || !$('yard').hidden || !$('map-panel').hidden;
+// On a phone the contract board is a sheet rather than a permanent panel, so reading it
+// holds the aircraft on station the way the map and the yard do.
+const overlayOpen = () => !$('intro').hidden || !$('yard').hidden || !$('map-panel').hidden
+  || $('outfit').classList.contains('open');
+
+// Nothing held, for when a panel is up.
+const IDLE_STICK = { x: 0, y: 0, boost: false, climb: false, descend: false };
 
 function flight(dt) {
   const held = overlayOpen() ? new Set() : keys;
-  const dx = (held.has('KeyD') || held.has('ArrowRight') ? 1 : 0) - (held.has('KeyA') || held.has('ArrowLeft') ? 1 : 0);
-  const dy = (held.has('KeyS') || held.has('ArrowDown') ? 1 : 0) - (held.has('KeyW') || held.has('ArrowUp') ? 1 : 0);
+  const stick = overlayOpen() ? IDLE_STICK : touchInput;
+  const dx = (held.has('KeyD') || held.has('ArrowRight') ? 1 : 0) - (held.has('KeyA') || held.has('ArrowLeft') ? 1 : 0) + stick.x;
+  const dy = (held.has('KeyS') || held.has('ArrowDown') ? 1 : 0) - (held.has('KeyW') || held.has('ArrowUp') ? 1 : 0) + stick.y;
   let mx = dx * screenRight.x - dy * screenUp.x;
   let mz = dx * screenRight.z - dy * screenUp.z;
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
-  const boost = held.has('ShiftLeft') || held.has('ShiftRight');
+  const boost = held.has('ShiftLeft') || held.has('ShiftRight') || stick.boost;
   const speed = boost ? 46 : 26;
   const drag = 1 - Math.exp(-3.4 * dt);
   craft.vx += (mx * speed - craft.vx) * drag;
@@ -557,7 +615,7 @@ function flight(dt) {
 
   // Terrain following: hold a clearance over whatever is below, climb fast, sink slowly.
   const ground = world.groundHeight(craft.x, craft.z);
-  const lift = held.has('Space') ? 26 : held.has('KeyC') ? -14 : 0;
+  const lift = held.has('Space') || stick.climb ? 26 : held.has('KeyC') || stick.descend ? -14 : 0;
   const wanted = Math.max(ground + 11, craft.y + lift * dt * 6);
   craft.y += (wanted - craft.y) * (1 - Math.exp(-(wanted > craft.y ? 4.5 : 1.8) * dt));
   craft.y = clamp(craft.y, ground + 4, 260);
@@ -600,7 +658,7 @@ function updateMarker() {
 
 function updateWinch(dt) {
   const usable = profile.heli.winch > 0 && mission && WINCH_KINDS.has(mission.kind);
-  const running = usable && keys.has('KeyE');
+  const running = usable && (keys.has('KeyE') || touchInput.winch);
   // Paid out to just above whatever is underneath, so the hook reaches the ground you are
   // hovering over rather than a fixed length into it.
   const clearance = running ? clamp(craft.y - world.groundHeight(craft.x, craft.z) - 1.5, 1, 22) : 0;
@@ -653,7 +711,11 @@ const baseView = () => 104 + Math.hypot(craft.vx, craft.vz) * 0.55;
 function viewHeight() { return baseView() * zoom; }
 
 function setZoom(step, snap = false) {
-  zoomStep = clamp(step, 0, ZOOM_STEPS.length - 1);
+  const next = clamp(step, 0, ZOOM_STEPS.length - 1);
+  // A pinch asks for the same step many times as the fingers move; only a real change is
+  // worth a flash and a repaint.
+  if (next === zoomStep && !snap) return;
+  zoomStep = next;
   if (snap) zoom = ZOOM_STEPS[zoomStep];
   const across = Math.round(viewHeight() * (innerWidth / innerHeight) * WORLD.metresPerUnit);
   flash(`VIEW ${ZOOM_STEPS[zoomStep].toFixed(2).replace(/0$/, '')}× · ${(across / 1000).toFixed(1)} KM ACROSS`);
@@ -666,6 +728,29 @@ addEventListener('wheel', event => {
   event.preventDefault();
   zoomBy(event.deltaY > 0 ? 1 : -1);
 }, { passive: false });
+
+// Two fingers on the world drive the same ladder the wheel does. A step is half a stop, so
+// each doubling of the gap between the fingers is two steps — which makes a comfortable
+// spread roughly the whole range, and a pinch the way back.
+const fingerGap = touches => Math.hypot(
+  touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
+
+let pinch = null;
+$('scene').addEventListener('touchstart', event => {
+  if (event.touches.length !== 2 || overlayOpen()) { pinch = null; return; }
+  event.preventDefault();
+  pinch = { gap: fingerGap(event.touches), step: zoomStep };
+}, { passive: false });
+$('scene').addEventListener('touchmove', event => {
+  if (!pinch || event.touches.length !== 2) return;
+  event.preventDefault();
+  const gap = fingerGap(event.touches);
+  if (gap < 12 || pinch.gap < 12) return;
+  setZoom(pinch.step - Math.round(Math.log2(gap / pinch.gap) * 2));
+}, { passive: false });
+for (const type of ['touchend', 'touchcancel']) {
+  $('scene').addEventListener(type, event => { if (event.touches.length < 2) pinch = null; });
+}
 
 function updateCamera(dt, snap = false) {
   // Zoom eases towards the chosen step, so a wheel click is a movement rather than a jump.
@@ -738,8 +823,11 @@ function resize() {
   composer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight, false);
   composer.setSize(innerWidth, innerHeight);
+  // Turning a phone over changes the box the map gets, and the map is drawn to fit it.
+  if (!$('map-panel').hidden && sizeMapCanvas()) refreshMap();
 }
 addEventListener('resize', resize);
+addEventListener('orientationchange', resize);
 
 // ---------------------------------------------------------------- region map
 // The map is the only place you see the whole hundred square kilometres at once, so it has
@@ -753,7 +841,95 @@ const mapCanvas = $('map');
 // map every frame, which only looked right because nothing is allowed to move while it is
 // open.
 const mapBase = document.createElement('canvas');
-let mapDrawn = false, mapMs = 0;
+// mapRedraws counts how often the expensive base has been rebuilt, which is how the tests
+// check that a flurry of gestures collapses into one redraw rather than one each.
+let mapDrawn = false, mapMs = 0, mapRedraws = 0;
+
+// ---------------------------------------------------------------- the map view
+// Which window of the region the map is showing. Five steps, each a halving of the ground
+// covered: the whole ten kilometres down to six hundred metres across, where one pixel is
+// finer than the height lattice and there is nothing left to resolve.
+//
+// The base image is redrawn for the window rather than magnified. That is the whole point:
+// zooming a map should show you more ground, not bigger pixels of the same ground.
+const MAP_SPANS = [1, 2, 4, 8, 16].map(divisor => WORLD.size / divisor);
+let mapStep = 0;
+const mapView = { x: 0, z: 0, span: MAP_SPANS[0] };
+// What the base image was last drawn for. While a finger is down the base is blitted to
+// the new window instead, so the map moves under the hand and sharpens when it lifts.
+const mapBaseView = { x: 0, z: 0, span: MAP_SPANS[0] };
+const mapBaseMatches = () => mapBaseView.span === mapView.span
+  && mapBaseView.x === mapView.x && mapBaseView.z === mapView.z;
+
+// Panned to the edge and no further: the region is all there is, and a map that slides off
+// into blank space is worse than one that stops.
+function clampMapView() {
+  const half = (WORLD.size - mapView.span) / 2;
+  mapView.x = half <= 0 ? 0 : clamp(mapView.x, -half, half);
+  mapView.z = half <= 0 ? 0 : clamp(mapView.z, -half, half);
+}
+
+// The canvas is sized to the box the layout gives it rather than a fixed 620 pixels, which
+// is what put 115 pixels of map off each side of a phone. The backing store goes to twice
+// the CSS size at most: enough for crisp labels on a phone without making the redraw four
+// times the work on a three-times display.
+function sizeMapCanvas() {
+  const rect = mapCanvas.getBoundingClientRect();
+  if (!rect.width) return false;
+  const size = clamp(Math.round(rect.width * Math.min(devicePixelRatio || 1, 2)), 320, 900);
+  if (mapCanvas.width === size) return false;
+  mapCanvas.width = size; mapCanvas.height = size;
+  return true;
+}
+
+// The cheap one: the base blitted to wherever the window is now, plus everything that
+// moves. Used while a gesture is in flight, and it puts off any pending redraw — the
+// picture should sharpen when the hand stops, not in the gap before the next pan.
+function nudgeMap() {
+  clearTimeout(mapRedrawTimer);
+  paintMap();
+}
+
+// Drawing the base is a hundred-odd milliseconds of one thread — it samples the height
+// field for every other pixel — so it waits for the hand to come off rather than running
+// on every release of a drag. Six quick pans used to queue six redraws and block the main
+// thread for most of a second, which swallowed the next tap. The cheap repaint keeps the
+// map moving under the finger meanwhile and the picture sharpens a moment later.
+let mapRedrawTimer = 0;
+function refreshMap({ now = false } = {}) {
+  if ($('map-panel').hidden) return;
+  paintMap();
+  clearTimeout(mapRedrawTimer);
+  if (now) { drawMap(); paintMap(); return; }
+  mapRedrawTimer = setTimeout(() => {
+    if ($('map-panel').hidden || mapBaseMatches()) return;
+    drawMap();
+    paintMap();
+  }, 110);
+}
+
+// Zoom about a point, so whatever is under the fingers stays under the fingers.
+function setMapZoom(step, about = null, settle = true) {
+  const next = clamp(step, 0, MAP_SPANS.length - 1);
+  const span = MAP_SPANS[next];
+  if (next === mapStep) return;
+  // Hold the world point under `about` at the same place in the frame: it sits at the same
+  // fraction of the window before and after.
+  if (about) {
+    mapView.x = about.x - (about.x - mapView.x) * (span / mapView.span);
+    mapView.z = about.z - (about.z - mapView.z) * (span / mapView.span);
+  }
+  mapStep = next;
+  mapView.span = span;
+  clampMapView();
+  if (settle) refreshMap(); else nudgeMap();
+}
+
+function resetMapView() {
+  mapStep = 0;
+  mapView.x = 0; mapView.z = 0; mapView.span = MAP_SPANS[0];
+  refreshMap();
+}
 
 // Fields are sampled every other pixel and the shade interpolated between, which is
 // invisible at this scale and four times less work: the old version sampled all 384,000
@@ -805,10 +981,13 @@ function labeller(ctx) {
 function drawMap() {
   const started = performance.now();
   const size = mapCanvas.width;
+  // Everything below is drawn for the current window rather than for the whole region, so
+  // a zoomed map is a finer sample of less ground instead of a magnified image.
+  const { x: centreX, z: centreZ, span } = mapView;
   mapBase.width = size; mapBase.height = size;
   const ctx = mapBase.getContext('2d');
   const lattice = Math.ceil(size / MAP_STEP) + 1;
-  const unitsPerNode = WORLD.size / size * MAP_STEP;
+  const unitsPerNode = span / size * MAP_STEP;
   const height = new Float32Array(lattice * lattice);
   const biome = new Uint8Array(lattice * lattice);
   const owner = new Int8Array(lattice * lattice);
@@ -817,8 +996,8 @@ function drawMap() {
   // than being recomputed inside each of them.
   for (let j = 0; j < lattice; j++) {
     for (let i = 0; i < lattice; i++) {
-      const x = (i * MAP_STEP / size - 0.5) * WORLD.size;
-      const z = (j * MAP_STEP / size - 0.5) * WORLD.size;
+      const x = centreX + (i * MAP_STEP / size - 0.5) * span;
+      const z = centreZ + (j * MAP_STEP / size - 0.5) * span;
       const h = world.elevation(x, z);
       const k = j * lattice + i;
       height[k] = h;
@@ -876,7 +1055,10 @@ function drawMap() {
   }
   ctx.putImageData(image, 0, 0);
 
-  const toMap = (x, z) => [(x / WORLD.size + 0.5) * size, (z / WORLD.size + 0.5) * size];
+  const toMap = (x, z) => [((x - centreX) / span + 0.5) * size, ((z - centreZ) / span + 0.5) * size];
+  // Off the window is not drawn, and — more to the point — does not take label space away
+  // from something that is on it.
+  const onFrame = (px, py, margin = 26) => px > -margin && px < size + margin && py > -margin && py < size + margin;
 
   // Coastline and faction borders, both traced off the lattice. A drawn border says
   // somebody holds this ground far better than tinting all of it does.
@@ -895,18 +1077,27 @@ function drawMap() {
     }
   }
 
-  // A kilometre grid and a scale bar, because ten by ten kilometres should be something you
-  // can measure off the map rather than something you are told in the header.
+  // A grid and a scale bar, because a distance should be something you can measure off the
+  // map rather than something you are told in the header. The spacing steps down with the
+  // zoom so there are always five to a dozen lines across the frame: a kilometre grid holds
+  // to the halfway step, then five hundred metres, then two hundred, then a hundred.
+  const acrossMetres = span * WORLD.metresPerUnit;
+  const gridMetres = [1000, 500, 200, 100, 50, 25].find(metres => metres <= acrossMetres / 5) ?? 25;
+  const gridUnits = gridMetres / WORLD.metresPerUnit;
   ctx.strokeStyle = 'rgba(232,240,214,.10)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let km = 1; km < 10; km++) {
-    const at = km / 10 * size;
+  for (let x = Math.ceil((centreX - span / 2) / gridUnits) * gridUnits; x <= centreX + span / 2; x += gridUnits) {
+    const at = toMap(x, 0)[0];
     ctx.moveTo(at, 0); ctx.lineTo(at, size);
+  }
+  for (let z = Math.ceil((centreZ - span / 2) / gridUnits) * gridUnits; z <= centreZ + span / 2; z += gridUnits) {
+    const at = toMap(0, z)[1];
     ctx.moveTo(0, at); ctx.lineTo(size, at);
   }
   ctx.stroke();
-  const barKm = 2, barPx = barKm / 10 * size;
+  const barPx = gridUnits / span * size;
+  const barLabel = gridMetres >= 1000 ? `${gridMetres / 1000} KM` : `${gridMetres} M`;
   ctx.fillStyle = 'rgba(9,20,18,.62)';
   ctx.fillRect(14, size - 32, barPx + 18, 22);
   ctx.strokeStyle = '#edeedf'; ctx.lineWidth = 2;
@@ -917,13 +1108,14 @@ function drawMap() {
   ctx.stroke();
   ctx.font = '600 8px Barlow, sans-serif';
   ctx.fillStyle = '#edeedf';
-  ctx.fillText(barKm + ' KM', 26, size - 22);
+  ctx.fillText(barLabel, 26, size - 22);
 
   const place = labeller(ctx);
 
   // Regions first: they are the biggest thing on the map and the labels that matter most.
   for (const region of world.regions.regions) {
     const [rx, ry] = toMap(region.x, region.z);
+    if (!onFrame(rx, ry)) continue;
     place(region.name, rx, ry, {
       font: '700 11px "Barlow Condensed", Barlow, sans-serif', colour: region.colour, centre: true, halo: 3.2,
     });
@@ -932,6 +1124,7 @@ function drawMap() {
   // Landmarks: a diamond and a name, and they never lose their label to a village.
   for (const mark of world.landmarks()) {
     const [mx, my] = toMap(mark.x, mark.z);
+    if (!onFrame(mx, my)) continue;
     ctx.save();
     ctx.translate(mx, my);
     ctx.rotate(Math.PI / 4);
@@ -947,18 +1140,26 @@ function drawMap() {
   const sites = world.allSettlements().slice().sort((a, b) => (order[a.kind] ?? 9) - (order[b.kind] ?? 9));
   for (const site of sites) {
     const [mx, my] = toMap(site.x, site.z);
+    if (!onFrame(mx, my, 8)) continue;
     ctx.fillStyle = FACTIONS[site.faction].colour;
     ctx.strokeStyle = 'rgba(9,20,18,.7)'; ctx.lineWidth = 1;
     const r = site.kind === 'town' ? 3.6 : site.kind === 'village' ? 2.8 : 2.2;
     ctx.beginPath(); ctx.arc(mx, my, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }
+  // Zoomed in there is room for every name, not just the four biggest kinds of place.
+  const named = span <= MAP_SPANS[2]
+    ? ['town', 'airfield', 'port', 'refinery', 'village', 'camp', 'outpost']
+    : ['town', 'airfield', 'port', 'refinery'];
   for (const site of sites) {
-    if (!['town', 'airfield', 'port', 'refinery'].includes(site.kind)) continue;
+    if (!named.includes(site.kind)) continue;
     const [mx, my] = toMap(site.x, site.z);
+    if (!onFrame(mx, my)) continue;
     place(site.name, mx, my, { font: '600 8px Barlow, sans-serif', colour: '#dfe6d2' });
   }
 
   mapDrawn = true;
+  mapRedraws++;
+  mapBaseView.x = centreX; mapBaseView.z = centreZ; mapBaseView.span = span;
   mapMs = performance.now() - started;
 }
 
@@ -969,54 +1170,271 @@ function paintMap() {
   const size = mapCanvas.width;
   const ctx = mapCanvas.getContext('2d');
   ctx.clearRect(0, 0, size, size);
-  ctx.drawImage(mapBase, 0, 0);
-  const toMap = (x, z) => [(x / WORLD.size + 0.5) * size, (z / WORLD.size + 0.5) * size];
+  // The base image, placed where the current window puts it. Settled that is one to one;
+  // mid-gesture it is scaled and offset, which is what keeps the map moving under the hand
+  // until the redraw catches up.
+  const scale = mapBaseView.span / mapView.span;
+  const offsetX = (mapBaseView.x - mapView.x) / mapView.span * size;
+  const offsetZ = (mapBaseView.z - mapView.z) / mapView.span * size;
+  ctx.drawImage(mapBase,
+    size / 2 + offsetX - size * scale / 2, size / 2 + offsetZ - size * scale / 2,
+    size * scale, size * scale);
+
+  const toMap = (x, z) => [((x - mapView.x) / mapView.span + 0.5) * size, ((z - mapView.z) / mapView.span + 0.5) * size];
+  // Markers were sized for a fixed 620-pixel canvas; now the canvas is whatever the screen
+  // can give it, so they are drawn in proportion to it.
+  const unit = size / 620;
   const [px, py] = toMap(craft.x, craft.z);
 
   // The job in hand, so the map answers where am I going as well as where am I.
   if (profile.active) {
     const [cx, cy] = toMap(profile.active.site.x, profile.active.site.z);
-    ctx.strokeStyle = 'rgba(243,178,94,.45)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(243,178,94,.45)'; ctx.lineWidth = unit;
     ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(cx, cy); ctx.stroke();
-    ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 1.6;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 1.6 * unit;
+    ctx.setLineDash([3 * unit, 3 * unit]);
+    ctx.beginPath(); ctx.arc(cx, cy, 11 * unit, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
   }
 
   const [hx, hy] = toMap(home.x, home.z);
-  ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(hx, hy, 7, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#f3b25e'; ctx.lineWidth = 2 * unit;
+  ctx.beginPath(); ctx.arc(hx, hy, 7 * unit, 0, Math.PI * 2); ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(hx - 11, hy); ctx.lineTo(hx + 11, hy);
-  ctx.moveTo(hx, hy - 11); ctx.lineTo(hx, hy + 11);
+  ctx.moveTo(hx - 11 * unit, hy); ctx.lineTo(hx + 11 * unit, hy);
+  ctx.moveTo(hx, hy - 11 * unit); ctx.lineTo(hx, hy + 11 * unit);
   ctx.stroke();
 
   // What the camera can actually see right now, which is how the zoom reads on the map.
-  const halfZ = viewHeight() / 2 / WORLD.size * size;
+  const halfZ = viewHeight() / 2 / mapView.span * size;
   const halfX = halfZ * (innerWidth / innerHeight);
-  ctx.strokeStyle = 'rgba(244,237,201,.34)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(244,237,201,.34)'; ctx.lineWidth = unit;
   ctx.strokeRect(px - halfX, py - halfZ, halfX * 2, halfZ * 2);
+
+  // Zoomed in, the aircraft is often outside the window. An arrow pinned to the edge says
+  // which way it is, so a zoomed map never loses you.
+  if (px < 0 || py < 0 || px > size || py > size) {
+    const edgeX = clamp(px, 14 * unit, size - 14 * unit), edgeY = clamp(py, 14 * unit, size - 14 * unit);
+    ctx.save();
+    ctx.translate(edgeX, edgeY);
+    ctx.rotate(Math.atan2(px - edgeX, -(py - edgeY)));
+    ctx.fillStyle = 'rgba(244,237,201,.72)';
+    ctx.beginPath();
+    ctx.moveTo(0, -9 * unit); ctx.lineTo(5.5 * unit, 4 * unit); ctx.lineTo(-5.5 * unit, 4 * unit);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
 
   ctx.save();
   ctx.translate(px, py);
   ctx.rotate(craft.yaw);
   ctx.fillStyle = '#f4edc9';
-  ctx.strokeStyle = '#1c2a26'; ctx.lineWidth = 1;
+  ctx.strokeStyle = '#1c2a26'; ctx.lineWidth = unit;
   ctx.beginPath();
-  ctx.moveTo(0, -7); ctx.lineTo(4.5, 5.5); ctx.lineTo(0, 2.5); ctx.lineTo(-4.5, 5.5);
+  ctx.moveTo(0, -7 * unit); ctx.lineTo(4.5 * unit, 5.5 * unit); ctx.lineTo(0, 2.5 * unit); ctx.lineTo(-4.5 * unit, 5.5 * unit);
   ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.restore();
+
+  const across = mapView.span * WORLD.metresPerUnit;
+  $('map-scale').textContent = `${across >= 1000 ? +(across / 1000).toFixed(2) + ' KM' : Math.round(across) + ' M'} ACROSS`
+    + ` · ${world.regionAt(mapView.x, mapView.z).name}`;
+  $('map-out').disabled = mapStep === 0;
+  $('map-in').disabled = mapStep === MAP_SPANS.length - 1;
 }
 
 function toggleMap() {
   const panel = $('map-panel');
   panel.hidden = !panel.hidden;
   if (panel.hidden) return;
-  if (!mapDrawn) drawMap();
+  const resized = sizeMapCanvas();
+  if (!mapDrawn || resized || !mapBaseMatches()) drawMap();
   paintMap();
 }
-$('map-close').addEventListener('click', toggleMap);
+onTap($('map-close'), toggleMap);
+
+// ---------------------------------------------------------------- map gestures
+// Drag to pan, pinch or wheel to zoom, double tap or double click to zoom in on a spot.
+// At ten kilometres across on a phone screen the whole region is about forty metres to the
+// pixel, so a map you cannot get closer to is a map you cannot read.
+const mapPointAt = (clientX, clientY) => {
+  const rect = mapCanvas.getBoundingClientRect();
+  return {
+    x: mapView.x + ((clientX - rect.left) / rect.width - 0.5) * mapView.span,
+    z: mapView.z + ((clientY - rect.top) / rect.height - 0.5) * mapView.span,
+  };
+};
+
+let mapPinch = null;
+let mapDrag = null;
+
+mapCanvas.addEventListener('pointerdown', event => {
+  if (mapPinch) return;
+  event.preventDefault();
+  try { mapCanvas.setPointerCapture(event.pointerId); } catch { /* a synthetic pointer cannot be captured */ }
+  mapDrag = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: 0 };
+});
+mapCanvas.addEventListener('pointermove', event => {
+  if (!mapDrag || event.pointerId !== mapDrag.id || mapPinch) return;
+  const rect = mapCanvas.getBoundingClientRect();
+  const dx = (event.clientX - mapDrag.x) / rect.width * mapView.span;
+  const dz = (event.clientY - mapDrag.y) / rect.height * mapView.span;
+  mapDrag.x = event.clientX; mapDrag.y = event.clientY;
+  mapDrag.moved += Math.abs(dx) + Math.abs(dz);
+  // The ground follows the finger, so dragging left brings what is on the right into view.
+  mapView.x -= dx; mapView.z -= dz;
+  clampMapView();
+  nudgeMap();
+});
+function endMapDrag(event) {
+  if (!mapDrag || (event && event.pointerId !== mapDrag.id)) return;
+  const moved = mapDrag.moved;
+  mapDrag = null;
+  if (moved > 0.5) refreshMap();
+}
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) mapCanvas.addEventListener(type, endMapDrag);
+
+mapCanvas.addEventListener('touchstart', event => {
+  if (event.touches.length !== 2) return;
+  event.preventDefault();
+  mapDrag = null;
+  mapPinch = { gap: fingerGap(event.touches), step: mapStep, about: mapPointAt(
+    (event.touches[0].clientX + event.touches[1].clientX) / 2,
+    (event.touches[0].clientY + event.touches[1].clientY) / 2) };
+}, { passive: false });
+mapCanvas.addEventListener('touchmove', event => {
+  if (!mapPinch || event.touches.length !== 2) return;
+  event.preventDefault();
+  const gap = fingerGap(event.touches);
+  if (gap < 12 || mapPinch.gap < 12) return;
+  // The map's steps are whole doublings, so one doubling of the finger gap is one step.
+  setMapZoom(mapPinch.step + Math.round(Math.log2(gap / mapPinch.gap)), mapPinch.about, false);
+}, { passive: false });
+for (const type of ['touchend', 'touchcancel']) {
+  mapCanvas.addEventListener(type, event => {
+    if (event.touches.length >= 2 || !mapPinch) return;
+    mapPinch = null;
+    refreshMap();
+  });
+}
+
+mapCanvas.addEventListener('wheel', event => {
+  event.preventDefault();
+  event.stopPropagation();
+  setMapZoom(mapStep + (event.deltaY > 0 ? -1 : 1), mapPointAt(event.clientX, event.clientY));
+}, { passive: false });
+mapCanvas.addEventListener('dblclick', event => {
+  event.preventDefault();
+  setMapZoom(mapStep + 1, mapPointAt(event.clientX, event.clientY));
+});
+
+onTap($('map-in'), () => setMapZoom(mapStep + 1, { x: craft.x, z: craft.z }));
+onTap($('map-out'), () => setMapZoom(mapStep - 1));
+onTap($('map-reset'), resetMapView);
+
+// ---------------------------------------------------------------- thumb controls
+// Left thumb flies, right thumb fights, and the rail down the right edge reaches the doors
+// that M, B, H and G reach on a keyboard. The stick is analogue: how far over it is sets
+// the speed, and pushed to the rim it runs the throttle up the way SHIFT does, so there is
+// no separate boost button to hold.
+const joystick = $('joystick');
+
+function moveStick(event) {
+  const rect = joystick.getBoundingClientRect();
+  const dx = event.clientX - (rect.left + rect.width / 2);
+  const dy = event.clientY - (rect.top + rect.height / 2);
+  const reach = rect.width * 0.34;
+  const length = Math.hypot(dx, dy);
+  const scale = length > reach ? reach / length : 1;
+  touchInput.x = Math.abs(dx) < 4 ? 0 : dx * scale / reach;
+  touchInput.y = Math.abs(dy) < 4 ? 0 : dy * scale / reach;
+  touchInput.boost = Math.hypot(touchInput.x, touchInput.y) > 0.82;
+  $('stick').style.transform = `translate(${dx * scale}px,${dy * scale}px)`;
+}
+
+let stickPointer = null;
+joystick.addEventListener('pointerdown', event => {
+  event.preventDefault();
+  stickPointer = event.pointerId;
+  try { joystick.setPointerCapture(event.pointerId); } catch { /* synthetic pointers cannot be captured */ }
+  moveStick(event);
+});
+joystick.addEventListener('pointermove', event => { if (event.pointerId === stickPointer) moveStick(event); });
+function centreStick(event) {
+  if (event && event.pointerId !== stickPointer) return;
+  stickPointer = null;
+  touchInput.x = 0; touchInput.y = 0; touchInput.boost = false;
+  $('stick').style.transform = '';
+}
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) joystick.addEventListener(type, centreStick);
+
+// A button that acts for as long as it is held, which is what firing, winching, flaring
+// and changing height all are.
+function holdButton(id, set) {
+  const button = $(id);
+  let pointer = null;
+  const release = event => {
+    if (event && event.pointerId !== pointer) return;
+    pointer = null;
+    set(false);
+    button.classList.remove('pressed');
+  };
+  button.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    pointer = event.pointerId;
+    try { button.setPointerCapture(event.pointerId); } catch { /* as above */ }
+    set(true);
+    button.classList.add('pressed');
+    wakeAudio();
+  });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(type, release);
+  return () => release(null);
+}
+
+const thumbReleases = [
+  holdButton('touch-fire', held => { touchInput.fire = held; }),
+  holdButton('touch-winch', held => { touchInput.winch = held; }),
+  holdButton('touch-flare', held => { touchInput.flare = held; }),
+  holdButton('touch-climb', held => { touchInput.climb = held; }),
+  holdButton('touch-descend', held => { touchInput.descend = held; }),
+];
+// Tabbing away or taking a call must not leave the trigger down.
+function releaseThumbs() {
+  centreStick();
+  for (const release of thumbReleases) release();
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseThumbs(); });
+
+// The contract board is a permanent panel with room to spare on a desktop and a sheet you
+// pull up on a phone. Either way, reading it holds the aircraft on station.
+function toggleWork() {
+  const open = $('outfit').classList.toggle('open');
+  $('rail-work').classList.toggle('on', open);
+}
+
+for (const [id, action] of Object.entries({
+  'rail-map': toggleMap,
+  'rail-work': toggleWork,
+  'rail-yard': toggleYard,
+  'rail-home': () => { teleportHome(); flash('BACK ON THE PAD'); },
+  'rail-panels': () => document.body.classList.toggle('telemetry'),
+})) onTap($(id), event => { event.preventDefault(); action(); });
+
+// The weapon tiles are the 1/2/3 keys for a thumb. Delegated, because renderWeapons
+// rebuilds them every time the ammunition count changes.
+onTap($('weapons'), event => {
+  const tile = event.target.closest('#weapons div');
+  if (!tile) return;
+  const index = [...$('weapons').children].indexOf(tile);
+  if (index < 0 || index >= availableWeapons(profile.heli).length) return;
+  combat.weapon = index;
+  renderWeapons();
+});
+
+// Tapping the darkness around a card closes it, which is what a phone expects of a sheet
+// and saves hunting for a small × in a corner.
+for (const [id, close] of [['map-panel', toggleMap], ['yard', toggleYard]]) {
+  $(id).addEventListener('pointerdown', event => { if (event.target === $(id)) close(); });
+}
 
 // ---------------------------------------------------------------- loop
 let last = 0, frames = 0, fpsAccum = 0, fps = 60, clock = 0, buildHitch = 0;
@@ -1030,7 +1448,7 @@ function frame(now) {
   flight(dt);
   syncHostiles(combat, world, profile, [...streamer.resident.keys()]);
   const events = stepCombat(combat, world, profile, craft,
-    { fire: keys.has('Space') || mouseFire, flare: keys.has('KeyF') }, dt);
+    { fire: keys.has('Space') || mouseFire || touchInput.fire, flare: keys.has('KeyF') || touchInput.flare }, dt);
   for (const event of events) {
     if (event.type === 'destroyed') {
       // Salvage rights: the fee is lower, but what you break on the way is yours.
@@ -1150,6 +1568,7 @@ window.merc = {
     regionNodes: world.regions.stats().nodes,
     fog: +scene.fog.density.toFixed(5),
     cable: +cableOut.toFixed(2),
+    projectiles: combat.projectiles.length,
     intro: !$('intro').hidden,
     zoom: +zoom.toFixed(2), zoomStep, viewAcross: Math.round(viewHeight() * (innerWidth / innerHeight)),
     overview: overview ? { visible: overview.mesh.visible, triangles: overview.triangles, ms: overview.ms } : null,
@@ -1167,6 +1586,17 @@ window.merc = {
   zoomSteps: () => [...ZOOM_STEPS],
   farField: () => buildFarField() && { triangles: overview.triangles, vertices: overview.vertices, ms: overview.ms },
   map: () => { if (!mapDrawn) drawMap(); return { ms: +mapMs.toFixed(0), drawn: mapDrawn }; },
+  // What window of the region the map is showing, and what its base image was drawn for.
+  // The two agreeing is how the tests know a zoom redrew the terrain rather than enlarging
+  // the picture of it.
+  mapView: () => ({
+    x: +mapView.x.toFixed(1), z: +mapView.z.toFixed(1), span: mapView.span, step: mapStep,
+    steps: MAP_SPANS.length, spans: [...MAP_SPANS], baseSpan: mapBaseView.span,
+    ms: +mapMs.toFixed(0), size: mapCanvas.width, redraws: mapRedraws, settled: mapBaseMatches(),
+  }),
+  mapZoomTo: step => { setMapZoom(step); refreshMap({ now: true }); return mapView.span; },
+  mapPan: (dx, dz) => { mapView.x += dx; mapView.z += dz; clampMapView(); refreshMap(); return { x: mapView.x, z: mapView.z }; },
+  touchInput: () => ({ ...touchInput }),
   dismiss: () => { $('intro-go').click(); return true; },
   audio,
   combat, mission: () => mission, profileRef: profile, saveProfile,

@@ -340,22 +340,58 @@ their failure states, four complications, the contract board, payment, the day r
 the yard with upgrades and hiring, saving, the first-run briefing, sound, the winch, and the
 telemetry that shows all of it.
 
-Also wired: eight steps of zoom to eight times the default view, the coarse region mesh that
-fills the far field, and the hillshaded region map with its grid, scale bar and
-collision-avoiding labels.
+Also wired: eight steps of zoom to eight times the default view, reachable by wheel, by key
+and by pinching the world; the coarse region mesh that fills the far field; and the
+hillshaded region map with its grid, scale bar and collision-avoiding labels, which now pans
+and zooms through five steps of its own.
+
+Also wired: the whole game on a phone. A coarse pointer gets a thumb stick that flies and
+runs the throttle up at the rim, buttons for firing, the winch, flares and height, tappable
+weapon tiles, and a rail down the right edge for the work, the map, the yard and the way
+home. Both aspect ratios a phone has are laid out and tested: 9:16 held upright and 16:9
+turned over.
 
 Not yet: no interiors or ground-level detail (the camera never gets close enough to need
 them), no weather beyond the one complication, no day/night cycle, and no persistent
 consequences for a faction beyond its standing number — a faction you have ruined does not
-yet visibly lose ground on the map. The region map does not pan or zoom; it does not need to
-at this scale, but a larger region would want it.
+yet visibly lose ground on the map.
+
+## The two zooms
+
+They are different things and it is worth keeping them apart.
+
+**The camera** has eight steps, each half a stop, so the eighth shows exactly eight times the
+ground of the first: 650 metres across the screen out to 7.4 kilometres. Past 1.3× the
+streamed rings no longer reach the edge of the frame and the coarse region mesh carries the
+far field, which is built once at boot and therefore cannot stall. Wheel, `-` `=` `0`, or two
+fingers on the world — a doubling of the gap between them is two steps, because a step is
+half a stop.
+
+**The region map** has five steps, each a halving: the whole ten kilometres down to 625
+metres across. It pans by dragging and clamps at the region's edge, and it zooms about
+whatever is under the pointer or between the fingers, so the thing you are looking at stays
+where you are looking.
+
+The map redraws its terrain for the window it is showing rather than magnifying the picture
+it already had. That is the only reason to zoom a map: the height field is resampled at the
+new scale, the hillshade recomputed, the kilometre grid stepped down to five hundred, two
+hundred or a hundred metres, the scale bar relabelled, and the smaller settlements given
+their names once there is room. Zoomed in, ten kilometres across a 620-pixel canvas — forty
+metres to the pixel — becomes about one metre to the pixel.
+
+Drawing that base costs a hundred-odd milliseconds, because it samples the height field for
+every other pixel, so it waits for the hand to come off. While a finger is down the existing
+base is scaled and offset to the new window, which keeps the map moving under the hand; the
+picture sharpens a moment after it stops. Six quick pans cost one redraw, not six — an
+earlier version redrew on every release and blocked the main thread for most of a second,
+which was long enough for the browser to throw away the next tap.
 
 ## Verification
 
 - **125 module checks** across seven suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
   layer with its landmarks and place names, and the newer four kinds with their complications.
-- **17 browser checks** (`npm run verify:world`) against the built single file served at the
+- **18 browser checks** (`npm run verify:world`) against the built single file served at the
   site root: it boots and renders, the briefing describes the generated region, real keyboard
   input flies the aircraft, the camera stays above the ground everywhere including the highest
   ground the sweep can find, nine regions and nine landmarks exist and the readout changes as
@@ -364,8 +400,23 @@ at this scale, but a larger region would want it.
   streamed terrain, the map draws inside a frame budget and repaints without accumulating
   markers, the map and yard open on real keys, all twelve kinds reach the board, a real key
   press pays the winch cable out, a contract can be flown for money, progress saves and
-  survives a reload, weather closes in and lifts, a ten-kilometre transit stays bounded, and
-  there are no external requests or script errors.
+  survives a reload, weather closes in and lifts, a ten-kilometre transit stays bounded, the
+  map pans and zooms through its five steps under a real wheel and a real mouse drag and
+  redraws the terrain at each scale, and there are no external requests or script errors.
+- **31 mobile checks** (`npm run verify:mobile`), the same built file at 390×844 and 844×390
+  with touch emulation and a phone user agent, driven by real browser-level touch input
+  through the debugger protocol rather than synthesised events — so pointer capture, gesture
+  recognition and `touch-action` behave as they do under a thumb. Both orientations: it boots
+  and knows it has a coarse pointer, the briefing fits with its one button on screen, no panel
+  hangs off an edge and the page does not scroll sideways, the chrome covers 14% of the screen
+  upright and 20% turned over rather than the 63% it used to, a thumb on the stick flies the
+  aircraft and releasing it centres, the fire button puts rounds in the air and the winch
+  button pays the cable out, pinching the world reaches both ends of the eight-step ladder
+  without the browser zooming the page instead, the map fits with every control reachable,
+  pinching it zooms and redraws the terrain at the new scale, dragging pans it and stops at
+  the region's edge, six quick pans collapse into one redraw, reset and close work on a tap,
+  the rail opens the board and the yard, weapon tiles switch on a tap, and the home button
+  flies you back to the pad.
 
 The BLOCKHAWK campaign is untouched: it still builds to the byte (`dist/blockhawk.html`
 hashes to the value pinned in `QA.md`) and its 19 browser checks still pass. See `README.md`.

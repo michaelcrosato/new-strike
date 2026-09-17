@@ -221,6 +221,74 @@ try {
   await page.keyboard.press('b');
   record('The region map and the yard open, draw and close on real key presses');
 
+  // ---------------------------------------------------------------- panning and zooming the map
+  // The map used to be one fixed picture of the whole region. Ten kilometres across a 620
+  // pixel canvas is forty metres to the pixel, which is too coarse to pick a landing site
+  // off — so it now pans and zooms, and redraws the terrain for whatever window it shows.
+  await page.keyboard.press('m');
+  await page.waitForTimeout(250);
+  const mapSettled = () => page.waitForFunction(() => window.merc.mapView().settled, null, { timeout: 8000 });
+  const view = () => page.evaluate(() => window.merc.mapView());
+  const canvasBox = await page.locator('#map').boundingBox();
+  const whole = await view();
+  assert.equal(whole.span, 2000, 'the map opens on the whole ten kilometres');
+  assert.equal(whole.step, 0, 'at the widest of its zoom steps');
+  assert.equal(whole.steps, 5, 'five steps, each a halving of the ground covered');
+
+  // The wheel zooms about the pointer, so what is under the cursor stays under the cursor —
+  // which is the difference between zooming a map and enlarging it.
+  const aim = { x: canvasBox.x + canvasBox.width * 0.3, y: canvasBox.y + canvasBox.height * 0.3 };
+  await page.mouse.move(aim.x, aim.y);
+  await page.mouse.wheel(0, -120);
+  await mapSettled();
+  const zoomedIn = await view();
+  assert.equal(zoomedIn.span, whole.span / 2, `one wheel click is one step: ${whole.span} -> ${zoomedIn.span}`);
+  assert.equal(zoomedIn.baseSpan, zoomedIn.span, 'and the terrain is redrawn for the new window');
+  assert.ok(zoomedIn.redraws > whole.redraws, 'which is a real redraw, not the old image scaled');
+  assert.ok(zoomedIn.x < -1 && zoomedIn.z < -1,
+    `zooming about the pointer pulls the view towards it: centre ${zoomedIn.x},${zoomedIn.z}`);
+
+  // Dragging with the mouse pans: the ground follows the hand.
+  const beforeDrag = await view();
+  const centre = { x: canvasBox.x + canvasBox.width / 2, y: canvasBox.y + canvasBox.height / 2 };
+  await page.mouse.move(centre.x, centre.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(centre.x - i * 14, centre.y - i * 14);
+  await page.mouse.up();
+  await mapSettled();
+  const panned = await view();
+  assert.ok(panned.x > beforeDrag.x + 1 && panned.z > beforeDrag.z + 1,
+    `dragging up and left brings the far side into view: ${beforeDrag.x},${beforeDrag.z} -> ${panned.x},${panned.z}`);
+
+  // All the way in: six hundred metres across, where a pixel is finer than the height
+  // lattice and there is nothing further to resolve.
+  const deepest = await page.evaluate(() => {
+    window.merc.mapZoomTo(window.merc.mapView().steps - 1);
+    return window.merc.mapView();
+  });
+  assert.equal(deepest.span, whole.span / 16, 'the last step is a sixteenth of the region');
+  assert.equal(Math.round(deepest.span * 5), 625, 'six hundred and twenty five metres across');
+  assert.equal(deepest.baseSpan, deepest.span, 'drawn at that scale rather than magnified');
+  assert.ok(deepest.ms < 500, `and still inside a frame budget: ${deepest.ms} ms`);
+  await page.screenshot({ path: 'artifacts/world-map-zoomed.png' });
+
+  // Panning cannot leave the region, at any zoom.
+  await page.evaluate(() => { for (let i = 0; i < 40; i++) window.merc.mapPan(400, 400); });
+  await mapSettled();
+  const pinned = await view();
+  const limit = (2000 - pinned.span) / 2;
+  assert.ok(Math.abs(pinned.x) <= limit + 1 && Math.abs(pinned.z) <= limit + 1,
+    `the window stays inside the region: ${pinned.x},${pinned.z} against a limit of ${limit}`);
+
+  await page.keyboard.press('0');
+  await mapSettled();
+  const backToWhole = await view();
+  assert.equal(backToWhole.span, whole.span, 'the 0 key shows the whole region again');
+  assert.ok(Math.abs(backToWhole.x) < 1 && Math.abs(backToWhole.z) < 1, 'centred on it');
+  await page.keyboard.press('m');
+  evidence.measurements.mapNavigation = { whole, zoomedIn, panned, deepest, pinned, backToWhole };
+  record('The region map pans and zooms through five steps, redrawing the terrain at each scale');
+
   // ---------------------------------------------------------------- all twelve kinds
   const KINDS = ['survey', 'delivery', 'extraction', 'salvage', 'patrol', 'escort',
     'strike', 'interdiction', 'sabotage', 'spotter', 'search', 'smuggling'];

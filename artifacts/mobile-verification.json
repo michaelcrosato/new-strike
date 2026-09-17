@@ -1,0 +1,539 @@
+{
+  "checks": [
+    "The built bundle boots and renders at 390x844 (portrait)",
+    "The briefing fits the screen and a tap gets past it (portrait)",
+    "No panel hangs off the edge of the screen and the page does not scroll (portrait)",
+    "The heads-up chrome leaves most of the world visible: 14% covered (portrait)",
+    "A thumb on the flight stick flies the aircraft, and releasing it centres (portrait)",
+    "The fire button shoots and the winch button pays out the cable (portrait)",
+    "Pinching the world reaches both ends of the eight-step zoom (portrait)",
+    "Game gestures do not become browser page-zoom (portrait)",
+    "The region map fits the screen and every control on it can be reached (portrait)",
+    "Pinching the region map zooms it and redraws the terrain at the new scale (portrait)",
+    "Dragging the region map pans it, stays inside the region, and does not redraw per gesture (portrait)",
+    "The map resets to the whole region and closes on a tap (portrait)",
+    "The rail opens the contract board and the yard, both readable and closable (portrait)",
+    "Weapon tiles switch weapons on a tap (portrait)",
+    "The rail button returns the aircraft to its own pad (portrait)",
+    "The built bundle boots and renders at 844x390 (landscape)",
+    "The briefing fits the screen and a tap gets past it (landscape)",
+    "No panel hangs off the edge of the screen and the page does not scroll (landscape)",
+    "The heads-up chrome leaves most of the world visible: 20% covered (landscape)",
+    "A thumb on the flight stick flies the aircraft, and releasing it centres (landscape)",
+    "The fire button shoots and the winch button pays out the cable (landscape)",
+    "Pinching the world reaches both ends of the eight-step zoom (landscape)",
+    "Game gestures do not become browser page-zoom (landscape)",
+    "The region map fits the screen and every control on it can be reached (landscape)",
+    "Pinching the region map zooms it and redraws the terrain at the new scale (landscape)",
+    "Dragging the region map pans it, stays inside the region, and does not redraw per gesture (landscape)",
+    "The map resets to the whole region and closes on a tap (landscape)",
+    "The rail opens the contract board and the yard, both readable and closable (landscape)",
+    "Weapon tiles switch weapons on a tap (landscape)",
+    "The rail button returns the aircraft to its own pad (landscape)",
+    "No external requests and no errors in either orientation"
+  ],
+  "errors": [],
+  "network": [],
+  "measurements": {
+    "portrait": {
+      "boot": {
+        "seed": 20492,
+        "position": {
+          "x": 12,
+          "z": -23,
+          "y": 26.75468429132233
+        },
+        "sample": {
+          "x": 12,
+          "z": -23,
+          "height": 12.75468429132233,
+          "moisture": 0.497351777786349,
+          "temperature": 0.6896404491716607,
+          "biome": 4,
+          "biomeKey": "savanna",
+          "faction": 0,
+          "river": 0,
+          "slope": 0.14284051969438116,
+          "region": "savanna",
+          "regionName": "THE LONG SAVANNA",
+          "regionIndex": 4
+        },
+        "resident": 66,
+        "pending": 0,
+        "meshes": 108,
+        "triangles": 47224,
+        "draw": 78,
+        "drawn": 36865,
+        "fps": 131,
+        "streamMs": 0.12,
+        "stats": {
+          "built": 66,
+          "disposed": 0,
+          "rebuiltForLod": 0,
+          "queued": 0,
+          "peakResident": 66
+        },
+        "region": "savanna",
+        "regionNodes": 6824,
+        "fog": 0.00085,
+        "cable": 0,
+        "projectiles": 0,
+        "intro": true,
+        "zoom": 1,
+        "zoomStep": 1,
+        "viewAcross": 48,
+        "overview": {
+          "visible": false,
+          "triangles": 131072,
+          "ms": 55.4
+        },
+        "mapMs": 0,
+        "cameraClearance": 156.6
+      },
+      "fit": {
+        "problems": [],
+        "boxes": {
+          ".topbar": {
+            "x": 0,
+            "y": 0,
+            "w": 390,
+            "h": 45
+          },
+          "#hud": {
+            "x": 12,
+            "y": 54,
+            "w": 206,
+            "h": 81
+          },
+          "#outfit": {
+            "x": 0,
+            "y": 851,
+            "w": 390,
+            "h": 331
+          },
+          "#touch-controls": {
+            "x": 0,
+            "y": 0,
+            "w": 390,
+            "h": 844
+          },
+          ".rail": {
+            "x": 328,
+            "y": 62,
+            "w": 52,
+            "h": 160
+          }
+        },
+        "scrollWidth": 390,
+        "vw": 390,
+        "vh": 844
+      },
+      "coveredPercent": 14,
+      "travelled": 45.9,
+      "fire": {
+        "peakShots": 4,
+        "cablePaid": 10.25
+      },
+      "pinchZoom": {
+        "zoomStart": 4,
+        "spread": 0,
+        "squeezed": 4,
+        "nearest": 0,
+        "farthest": 7
+      },
+      "mapFit": {
+        "canvas": {
+          "x": 15,
+          "y": 252,
+          "w": 360,
+          "h": 360
+        },
+        "canvasInside": true,
+        "cardInside": true,
+        "headInside": true,
+        "closeInside": true,
+        "controlsInside": true,
+        "backing": {
+          "w": 720,
+          "h": 720
+        }
+      },
+      "mapZoom": {
+        "whole": {
+          "x": 0,
+          "z": 0,
+          "span": 2000,
+          "step": 0,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 2000,
+          "ms": 147,
+          "size": 720,
+          "redraws": 1,
+          "settled": true
+        },
+        "duringPinch": {
+          "x": 0,
+          "z": 1.7,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 143,
+          "size": 720,
+          "redraws": 2,
+          "settled": true
+        },
+        "zoomedMap": {
+          "x": 0,
+          "z": 1.7,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 143,
+          "size": 720,
+          "redraws": 2,
+          "settled": true
+        }
+      },
+      "mapPan": {
+        "beforePan": {
+          "x": 0,
+          "z": 1.7,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 143,
+          "size": 720,
+          "redraws": 2,
+          "settled": true
+        },
+        "afterPan": {
+          "x": 166.7,
+          "z": 168.4,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 143,
+          "size": 720,
+          "redraws": 2,
+          "settled": false
+        },
+        "pinned": {
+          "x": -750,
+          "z": -750,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 106,
+          "size": 720,
+          "redraws": 3,
+          "settled": false
+        },
+        "limit": 750,
+        "redrawsForSixPans": 1
+      },
+      "yard": {
+        "columns": 1,
+        "inside": true,
+        "scrollable": true,
+        "fittings": 9
+      }
+    },
+    "landscape": {
+      "boot": {
+        "seed": 20492,
+        "position": {
+          "x": 12,
+          "z": -23,
+          "y": 26.75468429132233
+        },
+        "sample": {
+          "x": 12,
+          "z": -23,
+          "height": 12.75468429132233,
+          "moisture": 0.497351777786349,
+          "temperature": 0.6896404491716607,
+          "biome": 4,
+          "biomeKey": "savanna",
+          "faction": 0,
+          "river": 0,
+          "slope": 0.14284051969438116,
+          "region": "savanna",
+          "regionName": "THE LONG SAVANNA",
+          "regionIndex": 4
+        },
+        "resident": 66,
+        "pending": 0,
+        "meshes": 108,
+        "triangles": 47224,
+        "draw": 87,
+        "drawn": 43997,
+        "fps": 132,
+        "streamMs": 0.02,
+        "stats": {
+          "built": 66,
+          "disposed": 0,
+          "rebuiltForLod": 0,
+          "queued": 0,
+          "peakResident": 66
+        },
+        "region": "savanna",
+        "regionNodes": 6824,
+        "fog": 0.00085,
+        "cable": 0,
+        "projectiles": 0,
+        "intro": true,
+        "zoom": 1,
+        "zoomStep": 1,
+        "viewAcross": 225,
+        "overview": {
+          "visible": false,
+          "triangles": 131072,
+          "ms": 55.5
+        },
+        "mapMs": 0,
+        "cameraClearance": 156.6
+      },
+      "fit": {
+        "problems": [],
+        "boxes": {
+          ".topbar": {
+            "x": 0,
+            "y": 0,
+            "w": 844,
+            "h": 48
+          },
+          "#hud": {
+            "x": 26,
+            "y": 46,
+            "w": 196,
+            "h": 77
+          },
+          "#outfit": {
+            "x": 854,
+            "y": 46,
+            "w": 318,
+            "h": 332
+          },
+          "#touch-controls": {
+            "x": 0,
+            "y": 0,
+            "w": 844,
+            "h": 390
+          },
+          ".rail": {
+            "x": 782,
+            "y": 46,
+            "w": 52,
+            "h": 126
+          }
+        },
+        "scrollWidth": 844,
+        "vw": 844,
+        "vh": 390
+      },
+      "coveredPercent": 20,
+      "travelled": 46.5,
+      "fire": {
+        "peakShots": 5,
+        "cablePaid": 9.49
+      },
+      "pinchZoom": {
+        "zoomStart": 4,
+        "spread": 0,
+        "squeezed": 4,
+        "nearest": 0,
+        "farthest": 7
+      },
+      "mapFit": {
+        "canvas": {
+          "x": 17,
+          "y": 13,
+          "w": 354,
+          "h": 354
+        },
+        "canvasInside": true,
+        "cardInside": true,
+        "headInside": true,
+        "closeInside": true,
+        "controlsInside": true,
+        "backing": {
+          "w": 709,
+          "h": 709
+        }
+      },
+      "mapZoom": {
+        "whole": {
+          "x": 0,
+          "z": 0,
+          "span": 2000,
+          "step": 0,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 2000,
+          "ms": 145,
+          "size": 709,
+          "redraws": 1,
+          "settled": true
+        },
+        "duringPinch": {
+          "x": -1,
+          "z": -1,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 142,
+          "size": 709,
+          "redraws": 2,
+          "settled": true
+        },
+        "zoomedMap": {
+          "x": -1,
+          "z": -1,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 142,
+          "size": 709,
+          "redraws": 2,
+          "settled": true
+        }
+      },
+      "mapPan": {
+        "beforePan": {
+          "x": -1,
+          "z": -1,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 142,
+          "size": 709,
+          "redraws": 2,
+          "settled": true
+        },
+        "afterPan": {
+          "x": 168.3,
+          "z": 168.3,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 142,
+          "size": 709,
+          "redraws": 2,
+          "settled": false
+        },
+        "pinned": {
+          "x": -750,
+          "z": -750,
+          "span": 500,
+          "step": 2,
+          "steps": 5,
+          "spans": [
+            2000,
+            1000,
+            500,
+            250,
+            125
+          ],
+          "baseSpan": 500,
+          "ms": 104,
+          "size": 709,
+          "redraws": 3,
+          "settled": false
+        },
+        "limit": 750,
+        "redrawsForSixPans": 1
+      },
+      "yard": {
+        "columns": 3,
+        "inside": true,
+        "scrollable": true,
+        "fittings": 9
+      }
+    }
+  }
+}

@@ -11,7 +11,8 @@
     "verify": "node tests/browser.mjs",
     "build:world": "node scripts/build-world.mjs",
     "world": "node scripts/build-world.mjs && node scripts/serve.mjs",
-    "verify:world": "node tests/world-browser.mjs"
+    "verify:world": "node tests/world-browser.mjs",
+    "verify:mobile": "node tests/mobile-browser.mjs"
   },
   "dependencies": {
     "three": "0.186.0"

@@ -37,9 +37,22 @@ live. To play on a phone on the same Wi-Fi, open `http://<your-PC-LAN-address>:4
 scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=` zoom** · `0` reset the view ·
 `B` the yard · `M` the region map · `H` back to the pad · `G` hide the panels.
 
+On a phone the left thumb flies — pushed to the rim it runs the throttle up — and the right
+thumb fires, winches and throws flares, with `▲ ▼` for height, tappable weapon tiles, and a
+rail down the right edge for the work, the map, the yard and the way home. Both orientations
+are laid out: 9:16 upright and 16:9 turned over.
+
 The view zooms across **eight steps to eight times the default**, from 650 metres of ground
-across the screen to 7.4 kilometres. Everything past the streamed chunks is one coarse mesh
-of the whole region, built once, so pulling back never stalls.
+across the screen to 7.4 kilometres, by wheel, by key, or by pinching the world. Everything
+past the streamed chunks is one coarse mesh of the whole region, built once, so pulling back
+never stalls.
+
+The **region map pans and zooms** through five steps of its own, from the whole ten kilometres
+down to 625 metres across — drag to pan, pinch or wheel to zoom about the point you are
+looking at, `0` for the whole region. It redraws the terrain for the window it is showing
+rather than magnifying the image it had, so zooming in resolves more ground: the hillshade is
+resampled, the grid steps down to 500, 200 or 100 metres, and the smaller settlements get
+their names once there is room for them.
 
 The full design and its measurements are in **[MERCENARY.md](MERCENARY.md)**: the region layer,
 the nine landmarks, the streamer, combat, the twelve contract kinds and the verification.
@@ -107,9 +120,11 @@ Desktop graphics were checked on an **NVIDIA GeForce RTX 4070 SUPER**, with shor
 ## Source and verification
 
 ```powershell
-npm test          # deterministic flight, combat, resource and mission invariants
-npm run verify   # browser checks; npm start must be running; installed Chrome required
-npm run build    # rebuild both single-file deliverables
+npm test             # deterministic flight, combat, resource and mission invariants
+npm run verify       # campaign browser checks; npm start must be running; Chrome required
+npm run verify:world # MERCENARY STRIKE on a desktop viewport
+npm run verify:mobile# MERCENARY STRIKE at 9:16 and 16:9 with real touch input
+npm run build        # rebuild both single-file deliverables
 ```
 
 - `src/levels.js` — the campaign: each operation's map, pads, roster, objective chain and set dressing.

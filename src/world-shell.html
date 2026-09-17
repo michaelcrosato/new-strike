@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <!-- maximum-scale pins the page at 1:1, as the campaign's shell does. Left scalable, the
+       browser keeps double-tap-to-zoom armed, and a tap that lands soon after a pan is
+       treated as half of a possible double tap: its click is thrown away and the button
+       does nothing. A pinch here means the camera, never the page. -->
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#172b29">
   <title>MERCENARY STRIKE</title>
   <link rel="icon" href="__FAVICON__">
@@ -10,8 +14,14 @@
     :root{--ink:#172b29;--paper:#edeedf;--muted:#9fb49d;--amber:#f3b25e;--line:rgba(220,235,211,.18);--panel:rgba(16,32,30,.86);
       font-family:"Barlow",Arial,sans-serif;font-size:14px;color:var(--paper);color-scheme:dark}
     *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#20423d}
-    body{user-select:none;-webkit-user-select:none}
-    #scene{position:fixed;inset:0;width:100%;height:100%;display:block}
+    /* The game claims every gesture on itself: without this a two-finger pinch zooms the
+       browser's page instead of the camera, and a drag scrolls the document. */
+    body{user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+    /* touch-action does not inherit, so the rule on body never reaches a button. Left at
+       auto, Chrome watches every button for a double-tap to zoom the page and swallows the
+       click of a quick second tap — which is exactly what tapping a zoom control is. */
+    button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+    #scene{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
     .hidden,[hidden]{display:none!important}
     .topbar{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;align-items:center;gap:18px;
       padding:18px 26px 14px;background:linear-gradient(#0f2523aa,transparent);pointer-events:none}
@@ -82,11 +92,30 @@
     .keys kbd{border:1px solid var(--line);padding:2px 5px;margin-right:5px;color:var(--paper);font:inherit;border-radius:2px}
     #map-panel{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
       background:#0f2523d9;backdrop-filter:blur(8px)}
-    .map-card{background:linear-gradient(150deg,#22392fF2,#16292488);border:1px solid var(--line);padding:26px}
+    .map-card{background:linear-gradient(150deg,#22392fF2,#16292488);border:1px solid var(--line);padding:26px;
+      max-width:100%;max-height:100%;overflow:auto}
     .map-card header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;gap:40px}
     .map-card h2{font-family:"Barlow Condensed",Impact,sans-serif;font-size:38px;margin:0;letter-spacing:-.5px}
     .map-card small{font-size:8px;letter-spacing:2px;color:var(--muted)}
-    #map{display:block;width:620px;height:620px;image-rendering:auto;border:1px solid var(--line)}
+    /* Sized to the box the layout can spare rather than a fixed 620 pixels, which put 115
+       pixels of map off each side of a phone. The canvas backing store follows in script. */
+    .map-frame{position:relative;width:max-content;max-width:100%}
+    #map{display:block;width:620px;max-width:100%;height:auto;aspect-ratio:1;image-rendering:auto;
+      border:1px solid var(--line);touch-action:none;cursor:grab}
+    #map:active{cursor:grabbing}
+    .map-zoom{position:absolute;right:9px;top:9px;display:flex;flex-direction:column;gap:5px}
+    .map-zoom button{width:34px;height:34px;background:#16302bd9;border:1px solid var(--line);
+      font-size:15px;line-height:1;display:grid;place-content:center;backdrop-filter:blur(4px)}
+    .map-zoom button:hover:not(:disabled){border-color:var(--amber)}
+    /* Dim the glyph, not the whole control: at 34% opacity the end of the ladder looked
+       like a missing button rather than a disabled one. */
+    .map-zoom button:disabled{color:#7d9480;border-color:#dcebd314;cursor:default}
+    #map-scale{position:absolute;left:9px;top:9px;background:#16302bd9;border:1px solid var(--line);
+      padding:5px 7px;font-size:8px;letter-spacing:1.3px;backdrop-filter:blur(4px)}
+    /* The hint is a sentence among colour swatches, so it takes a line of its own wherever
+       the legend is laid out in columns. */
+    .map-hint{color:#8fa78d;grid-column:1/-1}
+    .map-hint kbd{border:1px solid var(--line);padding:1px 4px;margin-right:4px;color:var(--paper);font:inherit;border-radius:2px}
     .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:8px;letter-spacing:1.3px;color:var(--muted)}
     .legend i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
     #map-close{position:absolute;right:28px;top:22px;background:none;border:0;color:var(--paper);font-size:26px;cursor:pointer}
@@ -123,6 +152,170 @@
     #intro-go{margin-top:22px;width:100%;padding:13px;background:#3f4833;color:var(--paper);
       border:1px solid var(--amber);font:inherit;font-size:10px;letter-spacing:2.6px;cursor:pointer}
     #intro-go:hover{background:#4d5840}
+
+    /* ---------------------------------------------------------------- thumb controls */
+    /* On a desktop these are dead weight, so they only exist for a coarse pointer. The
+       key legend is the reverse: useless to a thumb, so it goes the other way. */
+    .rail,#touch-controls,.for-thumbs{display:none}
+    body.touch .rail{display:flex}
+    body.touch #touch-controls{display:block}
+    body.touch .keys,body.touch .for-keys{display:none}
+    body.touch .for-thumbs{display:block}
+    .for-thumbs b{color:var(--paper);font-weight:600}
+    /* A tablet keeps the desktop panels but gains the rail, so the board moves to clear it. */
+    body.touch #outfit{right:88px}
+    .rail{position:fixed;z-index:19;flex-direction:column;gap:5px;
+      right:calc(10px + env(safe-area-inset-right));top:calc(62px + env(safe-area-inset-top))}
+    .rail button{width:52px;padding:8px 0;background:var(--panel);border:1px solid var(--line);
+      color:var(--muted);font-size:8px;letter-spacing:1.3px;backdrop-filter:blur(6px)}
+    .rail button.on{border-color:var(--amber);color:var(--paper);background:#3f483399}
+    #touch-controls{position:fixed;inset:0;z-index:13;pointer-events:none}
+    #touch-controls>*{pointer-events:auto;touch-action:none}
+    #joystick{position:absolute;width:132px;height:132px;border:1px solid #d3dbc144;border-radius:50%;
+      background:radial-gradient(#173e3257,#16382940);
+      left:calc(18px + env(safe-area-inset-left));bottom:calc(20px + env(safe-area-inset-bottom))}
+    .stick-ring{position:absolute;inset:18px;border:1px dashed #d3dbc13b;border-radius:50%}
+    #stick{position:absolute;width:52px;height:52px;left:40px;top:40px;border:1px solid #dce3ca80;
+      background:#9fbf9b2b;border-radius:50%;display:grid;place-content:center;box-shadow:0 1px 16px #132f2763}
+    #stick i{width:5px;height:5px;border-radius:50%;background:#cedcc1}
+    #joystick>span{position:absolute;bottom:11px;left:0;right:0;text-align:center;font-size:7px;
+      letter-spacing:1.5px;color:#c2ceb6}
+    .touch-actions{position:absolute;width:196px;height:132px;
+      right:calc(16px + env(safe-area-inset-right));bottom:calc(20px + env(safe-area-inset-bottom))}
+    .touch-actions button,.touch-lift button{border-radius:50%;background:#284233b8;border:1px solid #d8e3c159;
+      color:#e2e3c4;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1px;
+      width:54px;height:54px;font-size:19px;touch-action:none}
+    .touch-actions button{position:absolute}
+    .touch-actions small{font-size:6px;letter-spacing:.6px}
+    .touch-actions button.pressed,.touch-lift button.pressed{background:#b6a06c80;border-color:var(--amber)}
+    #touch-fire{width:92px;height:92px;right:0;bottom:0;background:#72553685;border-color:#ffc0758f;color:#f1cf93}
+    #touch-fire>span{font-size:38px;line-height:40px}
+    #touch-fire.pressed{background:#cb995ba6}
+    #touch-winch{left:0;bottom:0}
+    #touch-flare{left:0;top:0}
+    /* Height is a modifier rather than something you hold all the time — the aircraft
+       follows the ground on its own — so these are small and out of the way. */
+    .touch-lift{position:absolute;display:flex;flex-direction:column;gap:8px;
+      left:calc(57px + env(safe-area-inset-left));bottom:calc(166px + env(safe-area-inset-bottom))}
+    .touch-lift button{width:46px;height:46px;font-size:13px}
+
+    /* ---------------------------------------------------------------- 9:16, held upright */
+    @media (max-width:760px){
+      .topbar{gap:9px;padding:calc(9px + env(safe-area-inset-top)) calc(13px + env(safe-area-inset-right))
+        9px calc(13px + env(safe-area-inset-left))}
+      .brand{font-size:11px;letter-spacing:1.4px;gap:7px}
+      .brand small{font-size:6px;letter-spacing:2.1px;margin-top:2px}
+      .brand-mark{width:27px;height:27px;font-size:20px}
+      .topbar .tag{font-size:7px;padding:3px 5px}
+      .topbar .tag+.tag{display:none}
+      #hud{width:min(54vw,206px);padding:9px 11px 8px;
+        left:calc(12px + env(safe-area-inset-left));top:calc(54px + env(safe-area-inset-top))}
+      .gauge{font-size:7px;padding:1px 0}.gauge span{width:36px}.gauge u{width:26px;font-size:7px}
+      #weapons{gap:3px;margin-top:7px}
+      #weapons div{padding:7px 3px;font-size:6px}
+      #weapons div u{font-size:9px;margin-top:1px}
+      #mission{margin-top:8px;padding-top:7px}
+      #mission small{font-size:6px}
+      /* The telemetry panel is a development readout. At 340 pixels it is most of a phone
+         screen, so it is off until the DATA button asks for it. */
+      #debug{display:none}
+      body.telemetry #debug{display:block;width:auto;bottom:auto;max-height:54vh;overflow:auto;z-index:20;
+        left:calc(12px + env(safe-area-inset-left));right:calc(12px + env(safe-area-inset-right));
+        top:calc(54px + env(safe-area-inset-top))}
+      /* The board becomes a sheet you pull up, because the work is something you read
+         between flights rather than while flying. */
+      body.touch #outfit{left:0;right:0;top:auto;bottom:0;width:auto;max-height:64vh;z-index:21;
+        border-width:1px 0 0;transform:translateY(102%);transition:transform .22s ease;
+        padding:14px 16px calc(14px + env(safe-area-inset-bottom))}
+      body.touch #outfit.open{transform:none}
+      #board li{padding:10px 11px}
+      #board li b{font-size:10px}
+      #map-panel,#yard,#intro{padding:0}
+      .map-card{width:100%;height:100%;padding:16px 14px calc(14px + env(safe-area-inset-bottom));
+        display:flex;flex-direction:column;justify-content:center;gap:12px}
+      .map-card header{gap:14px;margin-bottom:0;flex-direction:column;align-items:flex-start}
+      .map-card h2{font-size:27px}
+      .map-card header small{font-size:7px;line-height:1.6}
+      .map-frame{width:100%;align-self:center}
+      .legend{gap:7px 12px;margin-top:0;font-size:7px}
+      #map-close{right:14px;top:10px}
+      /* Centred, the flash landed on top of the mission line in the HUD. Below both panels
+         and above the thumbs there is a clear band the width of the screen. */
+      #flash{left:12px;right:12px;top:auto;bottom:calc(210px + env(safe-area-inset-bottom));
+        transform:none;font-size:10px;line-height:1.5}
+      .yard-card,.intro-card{width:100%;height:100%;max-height:100%}
+      .yard-card{padding:16px 15px calc(14px + env(safe-area-inset-bottom))}
+      .yard-card h2{font-size:29px}
+      .yard-card p{font-size:10px;margin:8px 0 14px}
+      .yard-grid{grid-template-columns:1fr;gap:14px}
+      .intro-card{padding:18px 16px calc(14px + env(safe-area-inset-bottom))}
+      .intro-card h2{font-size:31px}
+      .intro-card header{gap:12px}
+      .intro-grid{grid-template-columns:1fr;gap:14px}
+      .voice{padding:11px 13px;margin:12px 0 4px!important}
+      /* The briefing's one button was below the fold: a phone showed a wall of text and no
+         way in. Pinned to the bottom of the card, it is the first thing you see. */
+      #intro-go{position:sticky;bottom:0;margin-top:14px;padding:14px}
+    }
+
+    /* ---------------------------------------------------------------- 16:9, turned over */
+    @media (max-height:520px){
+      .topbar{padding:calc(7px + env(safe-area-inset-top)) 18px 7px}
+      .brand small{display:none}
+      #hud{width:min(30vw,196px);padding:8px 10px 7px;overflow:auto;
+        top:calc(46px + env(safe-area-inset-top));max-height:calc(100dvh - 58px)}
+      .gauge{font-size:7px;padding:1px 0}.gauge span{width:34px}.gauge u{width:26px;font-size:7px}
+      #weapons{gap:3px;margin-top:6px}
+      #weapons div{padding:6px 3px;font-size:6px}
+      #mission{margin-top:7px;padding-top:6px}
+      #debug{display:none}
+      body.telemetry #debug{display:block;width:300px;bottom:auto;overflow:auto;z-index:20;
+        top:calc(46px + env(safe-area-inset-top));max-height:calc(100dvh - 58px)}
+      body.touch #outfit{left:auto;bottom:auto;width:min(46vw,318px);z-index:21;
+        right:calc(70px + env(safe-area-inset-right));top:calc(46px + env(safe-area-inset-top));
+        max-height:calc(100dvh - 58px);transform:translateX(calc(100% + 80px));transition:transform .22s ease}
+      body.touch #outfit.open{transform:none}
+      .rail{gap:4px;top:calc(46px + env(safe-area-inset-top))}
+      .rail button{padding:6px 0;font-size:7px}
+      /* Sideways the height is what runs out, so the map takes it and the words go beside. */
+      #map-panel{padding:0}
+      /* auto/1fr rows, or the tall map spanning both rows shares its height out between
+         them and pushes the legend into the middle of the column. */
+      .map-card{width:100%;height:100%;padding:12px 16px;gap:0 18px;align-items:start;
+        display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto 1fr;
+        grid-template-areas:"frame head" "frame legend"}
+      .map-card header{grid-area:head;flex-direction:column;align-items:flex-start;gap:5px;margin:0 0 10px}
+      .map-card h2{font-size:26px}
+      .map-card header small{font-size:7px;line-height:1.6;max-width:40ch}
+      .map-frame{grid-area:frame}
+      #map{width:calc(100dvh - 34px);max-width:42vw}
+      .legend{grid-area:legend;margin-top:0;display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:7px}
+      #map-close{right:14px;top:8px}
+      .yard-card,.intro-card{width:100%;height:100%;max-height:100%}
+      .yard-card{padding:14px 18px}
+      .yard-card h2{font-size:26px}
+      .yard-card p{font-size:10px;margin:6px 0 12px;line-height:1.5}
+      .yard-grid{gap:14px}
+      .yard-grid h3{padding-top:8px;margin-bottom:8px}
+      .intro-card{padding:14px 18px}
+      .intro-card h2{font-size:26px}
+      .intro-card p{font-size:10px;line-height:1.55;margin-bottom:6px}
+      .intro-card h3{margin:11px 0 6px}
+      .voice{padding:9px 11px;margin:10px 0 4px!important}
+      .voice span{font-size:10px;line-height:1.55}
+      .intro-grid{gap:22px;margin-top:2px}
+      #intro{padding:0}
+      #intro-go{position:sticky;bottom:0;margin-top:12px;padding:11px}
+      /* Sideways there is room between the thumbs, and the left side is taken by the HUD. */
+      .touch-lift{left:50%;transform:translateX(-50%);flex-direction:row;
+        bottom:calc(22px + env(safe-area-inset-bottom))}
+      #joystick{width:118px;height:118px;bottom:calc(14px + env(safe-area-inset-bottom))}
+      #stick{left:33px;top:33px}
+      .touch-actions{width:180px;height:120px;bottom:calc(14px + env(safe-area-inset-bottom))}
+      .touch-actions button,.touch-lift button{width:48px;height:48px;font-size:17px}
+      #touch-fire{width:82px;height:82px}
+      #touch-fire>span{font-size:33px;line-height:35px}
+    }
   </style>
 </head>
 <body>
@@ -195,6 +388,31 @@
     </div>
   </section>
 
+  <!-- Shown only to a coarse pointer: the doors a keyboard opens with M, B, H and G. -->
+  <nav class="rail" aria-label="Panels">
+    <button id="rail-work" aria-label="Contract board">WORK</button>
+    <button id="rail-map" aria-label="Region map">MAP</button>
+    <button id="rail-yard" aria-label="The yard">YARD</button>
+    <button id="rail-home" aria-label="Return to your own pad">HOME</button>
+    <button id="rail-panels" aria-label="Show flight telemetry">DATA</button>
+  </nav>
+
+  <!-- Left thumb flies, right thumb fights. Pushed to the rim the stick is the throttle. -->
+  <div id="touch-controls">
+    <div id="joystick" aria-label="Flight stick">
+      <div class="stick-ring"></div><div id="stick"><i></i></div><span>FLIGHT</span>
+    </div>
+    <div class="touch-lift">
+      <button id="touch-climb" aria-label="Climb">▲</button>
+      <button id="touch-descend" aria-label="Descend">▼</button>
+    </div>
+    <div class="touch-actions">
+      <button id="touch-flare" aria-label="Countermeasure flares">✧<small>FLARE</small></button>
+      <button id="touch-winch" aria-label="Hold to winch, scan or mark">↧<small>WINCH</small></button>
+      <button id="touch-fire" aria-label="Fire the selected weapon"><span>⌖</span><small>FIRE</small></button>
+    </div>
+  </div>
+
   <div class="keys">
     <div><kbd>W A S D</kbd>fly</div>
     <div><kbd>SHIFT</kbd>run up the throttle</div>
@@ -212,7 +430,15 @@
         <h2>THE REGION.</h2>
         <small>10 × 10 KM · 9 REGIONS · 8 BIOMES · 5 FACTIONS · GENERATED FROM SEED</small>
       </header>
-      <canvas id="map" width="620" height="620" aria-label="Region map"></canvas>
+      <div class="map-frame">
+        <canvas id="map" width="620" height="620" aria-label="Region map"></canvas>
+        <div class="map-zoom">
+          <button id="map-in" aria-label="Zoom the map in">+</button>
+          <button id="map-out" aria-label="Zoom the map out">−</button>
+          <button id="map-reset" aria-label="Show the whole region">⟲</button>
+        </div>
+        <small id="map-scale">10 KM ACROSS</small>
+      </div>
       <div class="legend">
         <span><i style="background:#bddfa8"></i>FREEHOLD</span>
         <span><i style="background:#9fc4e0"></i>CORDON</span>
@@ -221,6 +447,7 @@
         <span><i style="background:#c79ad8"></i>SALT ROAD</span>
         <span><i style="background:#f3b25e"></i>YOUR YARD</span>
         <span><i style="background:#f4edc9;transform:rotate(45deg)"></i>LANDMARK</span>
+        <span class="map-hint">DRAG TO PAN · PINCH OR WHEEL TO ZOOM · <kbd>0</kbd>WHOLE REGION</span>
       </div>
     </div>
   </section>
@@ -240,13 +467,27 @@
         </div>
         <div>
           <h3>THE AIRCRAFT</h3>
-          <p><kbd>W A S D</kbd> fly · <kbd>SHIFT</kbd> throttle · <kbd>SPACE</kbd> climb · <kbd>C</kbd> descend</p>
-          <p><kbd>SPACE</kbd> fire · <kbd>E</kbd> winch, scan or mark · <kbd>F</kbd> flares · <kbd>1 2 3</kbd> weapons</p>
-          <p><kbd>B</kbd> the yard · <kbd>M</kbd> the map · <kbd>H</kbd> back to the pad · <kbd>G</kbd> hide the panels</p>
+          <div class="for-keys">
+            <p><kbd>W A S D</kbd> fly · <kbd>SHIFT</kbd> throttle · <kbd>SPACE</kbd> climb · <kbd>C</kbd> descend</p>
+            <p><kbd>SPACE</kbd> fire · <kbd>E</kbd> winch, scan or mark · <kbd>F</kbd> flares · <kbd>1 2 3</kbd> weapons</p>
+            <p><kbd>B</kbd> the yard · <kbd>M</kbd> the map · <kbd>H</kbd> back to the pad · <kbd>G</kbd> hide the panels</p>
+            <p>Wheel or <kbd>-</kbd> <kbd>=</kbd> zoom, <kbd>0</kbd> back to the default view.</p>
+          </div>
+          <!-- A phone has no keyboard, and being told to press W A S D is no use to it. -->
+          <div class="for-thumbs">
+            <p>Left thumb flies. Push the stick to the rim and the throttle comes up with it.
+              <b>▲ ▼</b> climb and descend.</p>
+            <p>Right thumb fights: <b>FIRE</b> shoots, <b>WINCH</b> winches, scans or marks, and
+              <b>FLARE</b> throws countermeasures. Tap a weapon tile to change weapon.</p>
+            <p>Down the right edge: the work, the map, the yard, and the way back to your pad.</p>
+            <p>Pinch the world to pull the camera back to eight times the view. The map pinches
+              and drags too, down to six hundred metres across.</p>
+          </div>
           <h3>THE WORK</h3>
-          <p>Jobs are on the board, top right. Take one and it tells you where to go and
-            what to do when you get there. Fuel and armour come back over your own pad and
-            nowhere else.</p>
+          <p class="for-keys">Jobs are on the board, top right.</p>
+          <p class="for-thumbs">Jobs are on the board, behind the WORK button.</p>
+          <p>Take one and it tells you where to go and what to do when you get there. Fuel
+            and armour come back over your own pad and nowhere else.</p>
           <p>Every job moves somebody's opinion of you. You will not stay neutral, and you
             are not supposed to.</p>
         </div>
