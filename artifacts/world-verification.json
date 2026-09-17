@@ -5,6 +5,10 @@
     "Renders on WebGPU and on the WebGL 2 fallback, to the same picture",
     "The frame keeps the original upbeat range, and each area carries its own tone",
     "Real keyboard input flies the aircraft at a modern gunship cruise and top speed",
+    "Movement is screen-relative, and with no aim input the aircraft flies nose-first",
+    "The arrow keys aim independently of where the aircraft is flying",
+    "The mouse aims: the nose points at the ground under the cursor",
+    "Rounds go where the aircraft is pointing, not where it is flying",
     "The camera stays above the ground everywhere, including the highest ground in the region",
     "Nine regions with nine landmarks, and the readout changes as you cross them",
     "Every one of the nine landmarks streams in and builds without error",
@@ -55,13 +59,24 @@
       "backend": "WebGPU",
       "webgpu": true,
       "speedKmh": 0,
+      "nose": {
+        "x": 0,
+        "z": -1
+      },
+      "travel": {
+        "x": 0,
+        "z": 0
+      },
+      "yaw": 0,
+      "aim": 0,
+      "aiming": false,
       "tint": "#fffefc",
       "tintAmount": 0.024,
       "exposure": 1.5,
       "sun": 3.75,
       "hemi": 1.78,
       "fps": 60,
-      "streamMs": 0,
+      "streamMs": 0.02,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -81,7 +96,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 68.4
+        "ms": 72.1
       },
       "mapMs": 0,
       "cameraClearance": 156.6
@@ -90,7 +105,7 @@
       "primary": "WebGPU",
       "hasWebGPU": true,
       "primaryFrame": {
-        "lum": 0.635,
+        "lum": 0.636,
         "sat": 0.615,
         "max": 0.733,
         "spread": 3
@@ -105,7 +120,7 @@
     "look": {
       "lum": 0.561,
       "sat": 0.56,
-      "max": 0.78,
+      "max": 0.779,
       "spread": 3.5,
       "clipped": 0.01,
       "perPlace": [
@@ -191,27 +206,92 @@
       "dashKmh": 313,
       "travelled": 58.6
     },
+    "dualStick": {
+      "headings": {
+        "w": {
+          "travel": {
+            "x": -0.63,
+            "z": -0.776
+          },
+          "nose": {
+            "x": -0.63,
+            "z": -0.776
+          },
+          "aiming": false
+        },
+        "s": {
+          "travel": {
+            "x": 0.63,
+            "z": 0.776
+          },
+          "nose": {
+            "x": 0.63,
+            "z": 0.776
+          },
+          "aiming": false
+        },
+        "a": {
+          "travel": {
+            "x": -0.741,
+            "z": 0.671
+          },
+          "nose": {
+            "x": -0.776,
+            "z": 0.63
+          },
+          "aiming": false
+        },
+        "d": {
+          "travel": {
+            "x": 0.779,
+            "z": -0.628
+          },
+          "nose": {
+            "x": 0.776,
+            "z": -0.63
+          },
+          "aiming": false
+        }
+      },
+      "behind": -0.99837,
+      "across": 0.002811999999999981,
+      "rounds": {
+        "count": 1,
+        "dir": {
+          "x": -0.14585663131176171,
+          "z": 0.9893057379305878
+        },
+        "nose": {
+          "x": -0.139,
+          "z": 0.99
+        },
+        "travel": {
+          "x": -0.63,
+          "z": -0.777
+        }
+      }
+    },
     "camera": {
       "out": [
         {
           "x": 0,
           "z": 0,
-          "clearance": 152.3
+          "clearance": 152.2
         },
         {
           "x": -851,
           "z": -483,
-          "clearance": 142.6
+          "clearance": 142.9
         },
         {
           "x": -55,
           "z": -467,
-          "clearance": 129
+          "clearance": 128.8
         },
         {
           "x": 535,
           "z": -516,
-          "clearance": 163.2
+          "clearance": 155.1
         },
         {
           "x": -561,
@@ -226,27 +306,27 @@
         {
           "x": 708,
           "z": -118,
-          "clearance": 149.1
+          "clearance": 147.8
         },
         {
           "x": -725,
           "z": 487,
-          "clearance": 140.8
+          "clearance": 140.4
         },
         {
           "x": 73,
           "z": 468,
-          "clearance": 151.5
+          "clearance": 152.2
         },
         {
           "x": 714,
           "z": 334,
-          "clearance": 171.7
+          "clearance": 170.4
         },
         {
           "x": 699,
           "z": -83,
-          "clearance": 203.7
+          "clearance": 199.6
         }
       ],
       "peak": {
@@ -281,8 +361,8 @@
         {
           "step": 0,
           "zoom": 0.7,
-          "across": 119,
-          "draw": 85,
+          "across": 118,
+          "draw": 84,
           "fog": 0.00105,
           "overview": false,
           "clearance": 144.2
@@ -291,34 +371,34 @@
           "step": 1,
           "zoom": 1,
           "across": 167,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00097,
           "overview": false,
-          "clearance": 172.5
+          "clearance": 170.9
         },
         {
           "step": 2,
           "zoom": 1.41,
           "across": 235,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00082,
           "overview": true,
-          "clearance": 230.8
+          "clearance": 230.9
         },
         {
           "step": 3,
           "zoom": 2,
           "across": 333,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00066,
           "overview": true,
-          "clearance": 302.6
+          "clearance": 302.5
         },
         {
           "step": 4,
           "zoom": 2.83,
           "across": 471,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00052,
           "overview": true,
           "clearance": 401.3
@@ -327,7 +407,7 @@
           "step": 5,
           "zoom": 4,
           "across": 666,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00039,
           "overview": true,
           "clearance": 542.5
@@ -336,7 +416,7 @@
           "step": 6,
           "zoom": 5.66,
           "across": 942,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00029,
           "overview": true,
           "clearance": 742.9
@@ -345,7 +425,7 @@
           "step": 7,
           "zoom": 8,
           "across": 1331,
-          "draw": 85,
+          "draw": 84,
           "fog": 0.00022,
           "overview": true,
           "clearance": 1025.3
@@ -354,7 +434,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 68.4
+        "ms": 72.1
       }
     },
     "pokeThrough": {
@@ -364,7 +444,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 115,
+      "ms": 128,
       "sameTwice": true
     },
     "mapNavigation": {
@@ -382,7 +462,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 115,
+        "ms": 128,
         "size": 620,
         "redraws": 1,
         "settled": true
@@ -401,7 +481,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 111,
+        "ms": 114,
         "size": 620,
         "redraws": 2,
         "settled": true
@@ -439,7 +519,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 131,
+        "ms": 137,
         "size": 620,
         "redraws": 4,
         "settled": true
@@ -458,7 +538,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 111,
+        "ms": 115,
         "size": 620,
         "redraws": 5,
         "settled": true
@@ -498,7 +578,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.363363965918619
+      "paidOut": 2.359479620928082
     },
     "job": {
       "cash": 5000,
@@ -530,7 +610,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0,
+      "worst": 0.02,
       "resident": 35,
       "nodes": 7255
     }

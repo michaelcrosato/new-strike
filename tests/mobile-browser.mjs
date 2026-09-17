@@ -242,6 +242,39 @@ try {
     measurements.fire = { peakShots, cablePaid };
     record(`The fire button shoots and the winch button pays out the cable (${label})`);
 
+    // ---------------------------------------------------------------- the second stick
+    // Dual-stick on a phone: the left thumb flies and the right thumb points. The fire
+    // control is a stick as well as a trigger — held still it fires straight ahead, and
+    // slid it aims, independently of where the aircraft is going.
+    await page.evaluate(() => {
+      window.merc.profileRef.active = null;
+      window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z);
+    });
+    await page.waitForTimeout(250);
+    const awayFromCamera = await page.evaluate(() => {
+      const c = window.merc.camera.position, p = window.merc.state().position;
+      const dx = p.x - c.x, dz = p.z - c.z, l = Math.hypot(dx, dz);
+      return { x: dx / l, z: dz / l };
+    });
+    const pad = await centreOf(page, '#touch-fire');
+    // Pushed up the screen, and held there.
+    await touch.drag({ x: pad.x, y: pad.y }, { x: pad.x, y: pad.y - 34 }, { steps: 6, hold: 900 });
+    const aimed = await page.evaluate(() => window.merc.state());
+    const along = aimed.nose.x * awayFromCamera.x + aimed.nose.z * awayFromCamera.z;
+    assert.ok(along > 0.9,
+      `${label}: pushing the aim stick up the screen points the nose that way: ${along.toFixed(3)}`);
+    await page.waitForTimeout(200);
+    assert.equal(await page.evaluate(() => window.merc.touchInput().aimX === 0 && window.merc.touchInput().aimY === 0), true,
+      `${label}: lifting the thumb centres the aim stick`);
+    // And pushed the other way it points the other way, which is what makes it a stick
+    // rather than a button that happens to move.
+    await touch.drag({ x: pad.x, y: pad.y }, { x: pad.x, y: pad.y + 34 }, { steps: 6, hold: 900 });
+    const reversed = await page.evaluate(() => window.merc.state());
+    const opposed = reversed.nose.x * awayFromCamera.x + reversed.nose.z * awayFromCamera.z;
+    assert.ok(opposed < -0.9, `${label}: and down the screen points it back: ${opposed.toFixed(3)}`);
+    measurements.aimStick = { up: +along.toFixed(3), down: +opposed.toFixed(3) };
+    record(`The aim stick points the aircraft, and centres when released (${label})`);
+
     // ---------------------------------------------------------------- pinch the world
     // The eight steps of zoom existed, but only a mouse wheel or a keyboard could reach
     // them. Spreading two fingers is a zoom in, the way it is everywhere else.

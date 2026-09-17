@@ -500,7 +500,7 @@ const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoi
 document.body.classList.toggle('touch', isTouch);
 
 // What the thumbs are asking for. Read alongside `keys` by flight, combat and the winch.
-const touchInput = { x: 0, y: 0, boost: false, fire: false, winch: false, flare: false, climb: false, descend: false };
+const touchInput = { x: 0, y: 0, aimX: 0, aimY: 0, boost: false, fire: false, winch: false, flare: false, climb: false, descend: false };
 
 let mouseFire = false;
 // Bound to the canvas, and only for a real mouse. On the window it also fired when you
@@ -525,12 +525,95 @@ const tracers = new TracerView(scene);
 
 // ---------------------------------------------------------------- flight
 const craft = {
-  x: home.x, z: home.z, y: home.height + 14, vx: 0, vz: 0, yaw: 0,
+  x: home.x, z: home.z, y: home.height + 14, vx: 0, vz: 0,
+  // `yaw` is where the nose is, `aim` is where it is being asked to go, and both are
+  // headings in the convention headingOf describes. They are separate from the direction of
+  // travel, which is the whole point of a dual-stick scheme.
+  yaw: 0, aim: 0, aiming: false,
   fuel: 100, throttle: 0,
 };
 const keys = new Set();
-const screenRight = new THREE.Vector3(0.63, 0, -0.78).normalize();
-const screenUp = new THREE.Vector3(-0.78, 0, -0.63).normalize();
+// The ground directions that "right" and "up the screen" mean, derived from the camera
+// offset rather than written out. They had been written out with their components
+// transposed — 0.63/-0.78 where the camera calls for 0.78/-0.63 — which skewed every input
+// by twelve degrees. Deriving them means they cannot drift from the camera again.
+const screenRight = new THREE.Vector3(cameraOffset.z, 0, -cameraOffset.x).normalize();
+const screenUp = new THREE.Vector3(-cameraOffset.x, 0, -cameraOffset.z).normalize();
+
+// ---------------------------------------------------------------- headings
+// One convention for which way a thing is pointing, shared with combat.js: a heading `h`
+// sends a round along (sin h, -cos h).
+//
+// The airframe's nose is its own local -Z, and a rotation of `h` about Y points local -Z
+// along (-sin h, -cos h) — mirrored in x. So the model takes the *negative* of the heading.
+// Getting that wrong is what made the aircraft fly tail-first when it went east or west
+// while looking perfectly correct going north or south.
+const headingOf = (dx, dz) => Math.atan2(dx, -dz);
+const turnToward = (from, to, rate, dt) =>
+  from + Math.atan2(Math.sin(to - from), Math.cos(to - from)) * (1 - Math.exp(-rate * dt));
+
+// A screen-relative stick reading, turned into a ground direction.
+const groundVector = (x, y, out) => out.set(
+  x * screenRight.x - y * screenUp.x, 0, x * screenRight.z - y * screenUp.z);
+const aimVector = new THREE.Vector3();
+
+// ---------------------------------------------------------------- aiming
+// Dual-stick: the left hand flies and the right hand points the aircraft. Movement is
+// screen-relative and independent of where the nose is, so the machine crabs and flies
+// backwards the way a gunship actually fights.
+//
+// Three things can aim, in this order of precedence: the right thumb stick, the arrow keys,
+// and the mouse. With none of them active the nose falls in behind the direction of travel,
+// so simply flying somewhere still looks like flying somewhere.
+const AIM_KEYS = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+const pointer = new THREE.Vector2();
+const aimRay = new THREE.Raycaster();
+const aimPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const aimPoint = new THREE.Vector3();
+const AIM_DEAD_ZONE = 18;          // world units around the aircraft where the cursor does not aim
+// The mouse aims while it is being used — while it has moved in the last couple of seconds,
+// or while the trigger is down — and then lets go. A cursor that aimed for ever would leave
+// the nose locked to wherever it was last parked, so a player who moved the mouse once and
+// then flew on the keyboard would never get the nose back.
+const AIM_LINGER = 2200;
+let pointerAimUntil = 0;
+
+addEventListener('pointermove', event => {
+  if (event.pointerType === 'touch') return;
+  pointer.set(event.clientX / innerWidth * 2 - 1, -(event.clientY / innerHeight * 2 - 1));
+  pointerAimUntil = performance.now() + AIM_LINGER;
+});
+
+// Where the pointer is on the ground, at the aircraft's own altitude.
+function aimFromPointer() {
+  if (performance.now() > pointerAimUntil && !mouseFire) return null;
+  aimPlane.constant = -craft.y;
+  aimRay.setFromCamera(pointer, camera);
+  if (!aimRay.ray.intersectPlane(aimPlane, aimPoint)) return null;
+  const dx = aimPoint.x - craft.x, dz = aimPoint.z - craft.z;
+  // A dead zone around the aircraft itself. Without it, a cursor resting near the machine
+  // — which is where it sits if nobody has moved it — swings the nose about on sub-unit
+  // differences, and the nose ends up following the camera instead of the player.
+  if (Math.hypot(dx, dz) < AIM_DEAD_ZONE) return null;
+  return headingOf(dx, dz);
+}
+
+// The heading the player is asking for, or null if they are not asking.
+function requestedAim(held, stick) {
+  if (Math.hypot(stick.aimX, stick.aimY) > 0.22) {
+    groundVector(stick.aimX, stick.aimY, aimVector);
+    return headingOf(aimVector.x, aimVector.z);
+  }
+  let kx = 0, ky = 0;
+  for (const [code, [x, y]] of Object.entries(AIM_KEYS)) {
+    if (held.has(code)) { kx += x; ky += y; }
+  }
+  if (kx || ky) {
+    groundVector(kx, ky, aimVector);
+    return headingOf(aimVector.x, aimVector.z);
+  }
+  return aimFromPointer();
+}
 
 addEventListener('keydown', e => {
   if (e.code === 'Tab' || e.code === 'F5') return;
@@ -576,15 +659,16 @@ const overlayOpen = () => !$('intro').hidden || !$('yard').hidden || !$('map-pan
   || $('outfit').classList.contains('open');
 
 // Nothing held, for when a panel is up.
-const IDLE_STICK = { x: 0, y: 0, boost: false, climb: false, descend: false };
+const IDLE_STICK = { x: 0, y: 0, aimX: 0, aimY: 0, boost: false, climb: false, descend: false };
 
 function flight(dt) {
   const held = overlayOpen() ? new Set() : keys;
   const stick = overlayOpen() ? IDLE_STICK : touchInput;
-  const dx = (held.has('KeyD') || held.has('ArrowRight') ? 1 : 0) - (held.has('KeyA') || held.has('ArrowLeft') ? 1 : 0) + stick.x;
-  const dy = (held.has('KeyS') || held.has('ArrowDown') ? 1 : 0) - (held.has('KeyW') || held.has('ArrowUp') ? 1 : 0) + stick.y;
-  let mx = dx * screenRight.x - dy * screenUp.x;
-  let mz = dx * screenRight.z - dy * screenUp.z;
+  // The arrows aim now rather than duplicating WASD, which is what makes this dual-stick.
+  const dx = (held.has('KeyD') ? 1 : 0) - (held.has('KeyA') ? 1 : 0) + stick.x;
+  const dy = (held.has('KeyS') ? 1 : 0) - (held.has('KeyW') ? 1 : 0) + stick.y;
+  groundVector(dx, dy, aimVector);
+  let mx = aimVector.x, mz = aimVector.z;
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
   const boost = held.has('ShiftLeft') || held.has('ShiftRight') || stick.boost;
@@ -599,13 +683,20 @@ function flight(dt) {
   craft.vz += (mz * speed - craft.vz) * drag;
   craft.x = clamp(craft.x + craft.vx * dt, -WORLD.half, WORLD.half);
   craft.z = clamp(craft.z + craft.vz * dt, -WORLD.half, WORLD.half);
-  if (len > 0.08) {
-    // Slower the faster you are going: a rotor that pivots on the spot in the hover has to
-    // fly a radius at three hundred kilometres an hour.
+  // Where the nose goes. An aim input wins outright and turns quickly, because it is a
+  // weapon; with no aim input the nose settles in behind the direction of travel at the
+  // rate the airframe can manage, which is slower the faster you are going — a rotor that
+  // pivots on the spot in the hover has to fly a radius at three hundred kilometres an hour.
+  const asked = requestedAim(held, stick);
+  craft.aiming = asked !== null;
+  if (asked !== null) {
+    craft.aim = asked;
+    craft.yaw = turnToward(craft.yaw, asked, FLIGHT.aimRate, dt);
+  } else if (len > 0.08) {
     const pace = clamp(Math.hypot(craft.vx, craft.vz) / TOP, 0, 1);
     const rate = FLIGHT.yawRate.hover + (FLIGHT.yawRate.top - FLIGHT.yawRate.hover) * pace;
-    const wantedYaw = Math.atan2(mx, -mz);
-    craft.yaw += Math.atan2(Math.sin(wantedYaw - craft.yaw), Math.cos(wantedYaw - craft.yaw)) * (1 - Math.exp(-rate * dt));
+    craft.aim = headingOf(mx, mz);
+    craft.yaw = turnToward(craft.yaw, craft.aim, rate, dt);
   }
 
   // Terrain following: hold a clearance over whatever is below, climb fast, sink slowly.
@@ -616,7 +707,8 @@ function flight(dt) {
   craft.y = clamp(craft.y, ground + 4, 260);
 
   heli.group.position.set(craft.x, craft.y, craft.z);
-  heli.group.rotation.y = craft.yaw;
+  // The negative, because the nose is the model's own local -Z. See headingOf.
+  heli.group.rotation.y = -craft.yaw;
   const forward = craft.vx * Math.sin(craft.yaw) - craft.vz * Math.cos(craft.yaw);
   const side = craft.vx * Math.cos(craft.yaw) + craft.vz * Math.sin(craft.yaw);
   heli.body.rotation.x = THREE.MathUtils.damp(heli.body.rotation.x, -forward * 0.006, 6, dt);
@@ -1392,8 +1484,51 @@ function holdButton(id, set) {
   return () => release(null);
 }
 
+// The right thumb is the second stick. Holding it fires; sliding it points the aircraft.
+// Held still — which is all a tap is — it fires straight ahead and lets the target lock do
+// the pointing, so it still behaves exactly as the plain button did.
+const aimPad = $('touch-fire');
+const aimNub = aimPad.firstElementChild;
+let aimPointer = null;
+
+function moveAimPad(event) {
+  const rect = aimPad.getBoundingClientRect();
+  const dx = event.clientX - (rect.left + rect.width / 2);
+  const dy = event.clientY - (rect.top + rect.height / 2);
+  const reach = rect.width * 0.42;
+  const length = Math.hypot(dx, dy);
+  const scale = length > reach ? reach / length : 1;
+  const dead = length < 7;
+  touchInput.aimX = dead ? 0 : dx * scale / reach;
+  touchInput.aimY = dead ? 0 : dy * scale / reach;
+  aimNub.style.transform = dead ? '' : `translate(${dx * scale * 0.55}px,${dy * scale * 0.55}px)`;
+}
+
+function releaseAimPad(event) {
+  if (event && event.pointerId !== aimPointer) return;
+  aimPointer = null;
+  touchInput.fire = false;
+  touchInput.aimX = 0; touchInput.aimY = 0;
+  aimPad.classList.remove('pressed');
+  aimNub.style.transform = '';
+}
+
+aimPad.addEventListener('pointerdown', event => {
+  event.preventDefault();
+  aimPointer = event.pointerId;
+  try { aimPad.setPointerCapture(event.pointerId); } catch { /* synthetic pointers cannot be captured */ }
+  touchInput.fire = true;
+  aimPad.classList.add('pressed');
+  wakeAudio();
+  moveAimPad(event);
+});
+aimPad.addEventListener('pointermove', event => { if (event.pointerId === aimPointer) moveAimPad(event); });
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  aimPad.addEventListener(type, releaseAimPad);
+}
+
 const thumbReleases = [
-  holdButton('touch-fire', held => { touchInput.fire = held; }),
+  () => releaseAimPad(null),
   holdButton('touch-winch', held => { touchInput.winch = held; }),
   holdButton('touch-flare', held => { touchInput.flare = held; }),
   holdButton('touch-climb', held => { touchInput.climb = held; }),
@@ -1565,6 +1700,10 @@ window.merc = {
     draw: frameDrawCalls(renderer), drawn: renderer.info.render.triangles,
     backend, webgpu: backend === 'WebGPU',
     speedKmh: Math.round(unitsToKmh(Math.hypot(craft.vx, craft.vz))),
+    // Read off the scene graph rather than recomputed, so a sign error cannot hide here.
+    nose: (() => { const v = new THREE.Vector3(0, 0, -1).applyQuaternion(heli.group.quaternion); return { x: +v.x.toFixed(3), z: +v.z.toFixed(3) }; })(),
+    travel: (() => { const l = Math.hypot(craft.vx, craft.vz) || 1; return { x: +(craft.vx / l).toFixed(3), z: +(craft.vz / l).toFixed(3) }; })(),
+    yaw: +craft.yaw.toFixed(3), aim: +craft.aim.toFixed(3), aiming: craft.aiming,
     tint: '#' + regionTint.getHexString(), tintAmount: +tintAt.toFixed(3),
     exposure: renderer.toneMappingExposure, sun: +sun.intensity.toFixed(2), hemi: +hemisphere.intensity.toFixed(2),
     fps: Math.round(fps), streamMs: +buildHitch.toFixed(2),
@@ -1587,6 +1726,8 @@ window.merc = {
   marks: () => world.landmarks().map(m => ({ key: m.key, short: m.short, x: m.x, z: m.z,
     height: +m.height.toFixed(1), region: m.region })),
   intro: () => { showIntro(); return true; },
+  // Where the pointer is on the ground, for verifying that the nose follows it.
+  aimPoint: () => ({ x: +aimPoint.x.toFixed(2), z: +aimPoint.z.toFixed(2) }),
   zoomTo: step => { setZoom(step, true); updateCamera(0, true); return ZOOM_STEPS[zoomStep]; },
   // The tone curve and the exposure, live. The node graph reads the curve when it is built,
   // so changing it rebuilds the chain.

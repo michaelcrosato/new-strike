@@ -176,6 +176,106 @@ try {
   evidence.measurements.flight = { cruiseKmh: moving.speedKmh, dashKmh: dashing.speedKmh, travelled: +travelled.toFixed(1) };
   record('Real keyboard input flies the aircraft at a modern gunship cruise and top speed');
 
+  // ---------------------------------------------------------------- dual-stick controls
+  // The left hand flies and the right hand points. Everything here is read off the scene
+  // graph rather than recomputed, because the bug this guards against was a sign error that
+  // the algebra hid: the nose is the model's own local -Z, so a rotation of +heading pointed
+  // it along (-sin, -cos) instead of (sin, -cos). It looked perfectly correct flying north
+  // or south and flew tail-first going east or west.
+  const agreement = (a, b) => a.x * b.x + a.z * b.z;
+  const flyFor = async (keys, seconds = 3.4) => {
+    await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+    for (const key of keys) await page.keyboard.down(key);
+    await page.waitForTimeout(seconds * 1000);
+    const reading = await state();
+    for (const key of keys) await page.keyboard.up(key);
+    await page.waitForTimeout(150);
+    return reading;
+  };
+
+  // Which way is away from the camera, on the ground. W should go exactly that way.
+  const awayFromCamera = await page.evaluate(() => {
+    const c = window.merc.camera.position, p = window.merc.state().position;
+    const dx = p.x - c.x, dz = p.z - c.z, l = Math.hypot(dx, dz);
+    return { x: dx / l, z: dz / l };
+  });
+
+  const headings = {};
+  for (const key of ['w', 's', 'a', 'd']) {
+    const reading = await flyFor([key]);
+    headings[key] = { travel: reading.travel, nose: reading.nose, aiming: reading.aiming };
+    assert.equal(reading.aiming, false, `${key} alone is not an aim input`);
+    assert.ok(agreement(reading.nose, reading.travel) > 0.97,
+      `${key.toUpperCase()} flies nose-first: nose (${reading.nose.x},${reading.nose.z}) against travel (${reading.travel.x},${reading.travel.z})`);
+  }
+  // And the movement is screen-relative, with the axes the camera actually implies.
+  assert.ok(agreement(headings.w.travel, awayFromCamera) > 0.97,
+    'W flies away from the camera, up the screen');
+  assert.ok(agreement(headings.s.travel, awayFromCamera) < -0.97, 'S flies towards it');
+  assert.ok(Math.abs(agreement(headings.d.travel, awayFromCamera)) < 0.06,
+    'D flies square across the screen, not on a diagonal');
+  assert.ok(agreement(headings.a.travel, headings.d.travel) < -0.97, 'A is the opposite of D');
+  record('Movement is screen-relative, and with no aim input the aircraft flies nose-first');
+
+  // Aim is independent of travel, which is the whole point of the scheme.
+  const behind = await flyFor(['w', 'ArrowDown']);
+  assert.equal(behind.aiming, true, 'an arrow key is an aim input');
+  assert.ok(agreement(behind.nose, behind.travel) < -0.97,
+    `flying forwards while pointing backwards: ${agreement(behind.nose, behind.travel).toFixed(3)}`);
+  const across = await flyFor(['w', 'ArrowRight']);
+  assert.ok(Math.abs(agreement(across.nose, across.travel)) < 0.12,
+    `flying forwards while pointing across: ${agreement(across.nose, across.travel).toFixed(3)}`);
+  record('The arrow keys aim independently of where the aircraft is flying');
+
+  // The mouse is the other way to aim: the nose points at the ground under the cursor.
+  for (const [x, y] of [[1050, 200], [300, 620]]) {
+    await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+    await page.mouse.move(x, y);
+    await page.waitForTimeout(700);
+    const aimed = await state();
+    const ground = await page.evaluate(() => window.merc.aimPoint());
+    const dx = ground.x - aimed.position.x, dz = ground.z - aimed.position.z;
+    const length = Math.hypot(dx, dz) || 1;
+    assert.equal(aimed.aiming, true, 'the pointer aims once it has moved');
+    assert.ok(agreement(aimed.nose, { x: dx / length, z: dz / length }) > 0.99,
+      `the nose points at the cursor from ${x},${y}`);
+  }
+  record('The mouse aims: the nose points at the ground under the cursor');
+
+  // And the gun follows the nose rather than the direction of travel.
+  await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+  await page.mouse.move(300, 620);
+  await page.keyboard.down('w');
+  // Short of the linger, so the cursor is still aiming when the trigger goes. Left longer
+  // the mouse lets go by design, the nose falls in behind the travel, and this would be
+  // measuring travel-following rather than aiming.
+  await page.waitForTimeout(1400);
+  const rounds = await page.evaluate(() => {
+    const merc = window.merc;
+    merc.combat.projectiles.length = 0;
+    // No hostiles in reach, so the target-lock assist cannot claim the shot: this is
+    // measuring where an *unaimed* round goes, which is along the nose.
+    merc.combat.hostiles.length = 0;
+    // The nose as it is at the instant of firing. Read after a longer burst it drifts,
+    // because the nose is still easing towards a cursor that moves with the camera.
+    const before = merc.state();
+    merc.simulate(0.1, { Space: true });
+    const live = merc.combat.projectiles.filter(p => !p.hostile);
+    const shot = live[0];
+    const length = shot ? Math.hypot(shot.vx, shot.vz) : 1;
+    return { count: live.length, dir: shot ? { x: shot.vx / length, z: shot.vz / length } : null,
+      nose: before.nose, travel: before.travel };
+  });
+  await page.keyboard.up('w');
+  assert.ok(rounds.count > 0, 'holding fire puts rounds in the air');
+  // The door gun has a little spread, so this is not expected to be exactly one.
+  assert.ok(agreement(rounds.dir, rounds.nose) > 0.995,
+    `rounds follow the nose: ${agreement(rounds.dir, rounds.nose).toFixed(4)}`);
+  assert.ok(agreement(rounds.dir, rounds.travel) < 0.5,
+    'and not the direction of travel, or aiming would be decoration');
+  evidence.measurements.dualStick = { headings, behind: agreement(behind.nose, behind.travel), across: agreement(across.nose, across.travel), rounds };
+  record('Rounds go where the aircraft is pointing, not where it is flying');
+
   // ---------------------------------------------------------------- the camera
   // Every peak the generator can produce, from the lowest ground to the ceiling.
   const clearances = await page.evaluate(() => {

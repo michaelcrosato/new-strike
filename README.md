@@ -33,9 +33,14 @@ live. To play on a phone on the same Wi-Fi, open `http://<your-PC-LAN-address>:4
 
 ## MERCENARY STRIKE
 
-`W A S D` fly · `SHIFT` throttle · `SPACE` climb · `C` descend · `SPACE` fire · `E` winch,
-scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=` zoom** · `0` reset the view ·
-`B` the yard · `M` the region map · `H` back to the pad · `G` hide the panels.
+**Dual-stick: the left hand flies and the right hand points.** `W A S D` fly · **the mouse or
+the arrow keys aim** · `SHIFT` throttle · `SPACE` climb · `C` descend · `SPACE` fire · `E`
+winch, scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=` zoom** · `0` reset the
+view · `B` the yard · `M` the region map · `H` back to the pad · `G` hide the panels.
+
+Movement is screen-relative and independent of where the nose is, so the aircraft crabs and
+flies backwards the way a gunship fights — you can run from a checkpoint with the gun still on
+it. On a phone the right thumb is the second stick: hold to fire, slide to aim.
 
 On a phone the left thumb flies — pushed to the rim it runs the throttle up — and the right
 thumb fires, winches and throws flares, with `▲ ▼` for height, tappable weapon tiles, and a

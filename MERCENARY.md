@@ -11,7 +11,7 @@ the twelve kinds of job you fly.
 ```powershell
 npm run world          # builds the game and serves it
 npm test               # 131 checks across eight suites
-npm run verify:world   # 20 browser checks against the built bundle (server must be running)
+npm run verify:world   # 24 browser checks against the built bundle (server must be running)
 ```
 
 Open **http://localhost:4189**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
@@ -311,6 +311,46 @@ Weather takes the tint off for the job that carries it: its own mood wins. The g
 dirt belong later, when the region has turned on you — the opening should look like a good
 day to be flying.
 
+## The controls — dual-stick
+
+**The left hand flies and the right hand points.** Movement is screen-relative and entirely
+independent of where the nose is, so the aircraft crabs, slides and flies backwards the way a
+gunship actually fights: you can run from a checkpoint with the gun still on it.
+
+| | fly | aim |
+| --- | --- | --- |
+| desktop | `W A S D` | the mouse, or the arrow keys |
+| phone | left thumb stick | right thumb stick (hold to fire, slide to aim) |
+
+The mouse aims at the ground under the cursor, and **lets go again** — it aims while it has
+moved in the last couple of seconds or while the trigger is down, and then the nose falls in
+behind the direction of travel. Without that, moving the mouse once and then flying on the
+keyboard would leave the nose locked to wherever the cursor was last parked. There is a
+dead zone of eighteen units around the aircraft, or a cursor resting on the machine swings
+the nose about on sub-unit differences.
+
+With no aim input at all the nose follows travel, at the rate the airframe can manage —
+slower the faster you are going. An aim input overrides that and turns much more quickly,
+because pointing the aircraft is aiming a gun rather than flying a turn.
+
+Two bugs were in the way of this, and both are now asserted against:
+
+- **The aircraft flew tail-first.** The nose is the model's own local −Z, so rotating it by a
+  heading `h` pointed it along `(−sin h, −cos h)` while the round went along `(sin h, −cos h)`
+  — mirrored in x. It looked perfectly correct flying north or south and flew backwards going
+  east or west, which is exactly how it was reported. There is now one heading convention,
+  written down, shared with `combat.js`, and the model takes the negative of it.
+- **Every input was skewed twelve degrees.** The ground directions for "screen right" and "up
+  the screen" had been written out with their components transposed — 0.63/−0.78 where the
+  camera calls for 0.78/−0.63. They are now derived from the camera offset, so they cannot
+  drift from it again.
+
+The browser suite reads the nose straight off the scene graph rather than recomputing it,
+because the algebra is what hid the bug in the first place: it flies all four directions and
+fails if the nose and the travel disagree, checks that the arrows and the mouse each point the
+aircraft independently of where it is going, and checks that rounds leave along the nose and
+not along the travel.
+
 ## Flight — `src/flight.js`
 
 The aircraft used to cruise at **468 km/h and dash at 828**, which is a jet. It made a
@@ -501,7 +541,8 @@ which was long enough for the browser to throw away the next tap.
 - **18 browser checks** (`npm run verify:world`) against the built single file served at the
   site root: it boots and renders on both backends to the same picture, the briefing describes
   the generated region, the frame keeps the original's upbeat range and each area carries its
-  own tone, real keyboard input flies the aircraft at a gunship's cruise and top speed, the camera stays above the ground everywhere including the highest
+  own tone, real keyboard input flies the aircraft at a gunship's cruise and top speed, the dual-stick
+  controls fly and aim independently and the gun follows the nose, the camera stays above the ground everywhere including the highest
   ground the sweep can find, nine regions and nine landmarks exist and the readout changes as
   you cross them, every landmark streams in without error, the zoom ladder reaches exactly
   eight times the default with the far field filling it, the coarse mesh stays under the

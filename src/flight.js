@@ -33,8 +33,14 @@ export const FLIGHT = {
   spoolSeconds: 1.25,
 
   // Turning is slower the faster you are going, the way it is in the air: a rotor that can
-  // pivot on the spot in the hover has to fly a radius at 300 km/h.
+  // pivot on the spot in the hover has to fly a radius at 300 km/h. This is the rate the
+  // nose settles in behind the direction of travel when nobody is aiming.
   yawRate: { hover: 6.2, top: 2.4 },
+
+  // How fast the nose answers an aim input. Much quicker than the above, because pointing
+  // the aircraft is aiming a gun rather than flying a turn — but not instant, or the
+  // machine snaps around like a turret.
+  aimRate: 13,
 
   // Fuel, per second. A full basic tank is a hundred, which at cruise is a little over two
   // and a half times the region's diagonal — enough that a job anywhere on the map is
