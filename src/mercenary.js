@@ -53,7 +53,7 @@ scene.fog = new THREE.FogExp2(0x9fb3ad, 0.00085);
 
 const camera = new THREE.OrthographicCamera(-75, 75, 45, -45, 0.5, 900);
 const cameraOffset = new THREE.Vector3(112, 142, 138);
-const cameraFocus = new THREE.Vector3(home.x, 0, home.z);
+const cameraFocus = new THREE.Vector3(home.x, home.height, home.z);
 
 scene.add(new THREE.HemisphereLight(0xb9d2cc, 0x54604a, 1.25));
 const sun = new THREE.DirectionalLight(0xffe2ae, 2.6);
@@ -500,7 +500,7 @@ addEventListener('blur', () => keys.clear());
 function teleportHome() {
   craft.x = home.x; craft.z = home.z; craft.vx = 0; craft.vz = 0;
   craft.y = world.groundHeight(home.x, home.z) + 16;
-  cameraFocus.set(craft.x, 0, craft.z);
+  cameraFocus.set(craft.x, craft.y - 16, craft.z);
   streamer.settle(craft.x, craft.z, 200);
 }
 
@@ -595,15 +595,23 @@ function updateCamera(dt, snap = false) {
   camera.left = -view * aspect / 2; camera.right = view * aspect / 2;
   camera.top = view / 2; camera.bottom = -view / 2;
   camera.updateProjectionMatrix();
-  const target = new THREE.Vector3(craft.x + craft.vx * 0.5, 0, craft.z + craft.vz * 0.5);
+  // The focus tracks the ground under the aircraft, not the sea. It used to sit at y = 0,
+  // which put the camera at a fixed 142 units of absolute altitude — so on an alpine
+  // summit, where the region legitimately reaches 158, the camera ended up *underneath the
+  // terrain* and the frame was rendered from inside the mountain. Following the ground
+  // keeps the framing identical at every elevation.
+  const floor = world.groundHeight(craft.x, craft.z);
+  const target = new THREE.Vector3(craft.x + craft.vx * 0.5, floor, craft.z + craft.vz * 0.5);
   if (snap) cameraFocus.copy(target); else cameraFocus.lerp(target, 1 - Math.exp(-4 * dt));
   camera.position.copy(cameraFocus).add(cameraOffset);
   camera.lookAt(cameraFocus);
   camera.updateMatrixWorld();
-  // The shadow camera tracks the aircraft in quantised steps to keep shadows from crawling.
+  // The shadow camera tracks the aircraft in quantised steps to keep shadows from crawling,
+  // and rises with the focus so the frustum still covers the ground it is lighting.
   const sx = Math.round(cameraFocus.x / 4) * 4, sz = Math.round(cameraFocus.z / 4) * 4;
-  sun.position.set(sx - 90, 150, sz + 80);
-  sun.target.position.set(sx, 0, sz);
+  const sy = Math.round(cameraFocus.y / 4) * 4;
+  sun.position.set(sx - 90, sy + 150, sz + 80);
+  sun.target.position.set(sx, sy, sz);
   sun.target.updateMatrixWorld();
 }
 
@@ -860,6 +868,10 @@ window.merc = {
     fog: +scene.fog.density.toFixed(5),
     cable: +cableOut.toFixed(2),
     intro: !$('intro').hidden,
+    // Clearance of the camera above the ground beneath it. Negative means the frame is
+    // being rendered from inside a hill, which is what happened on an alpine summit while
+    // the focus was pinned to sea level.
+    cameraClearance: +(camera.position.y - world.groundHeight(camera.position.x, camera.position.z)).toFixed(1),
   }),
   regions: () => world.regions.regions.map(r => ({ key: r.key, name: r.name, x: r.x, z: r.z })),
   marks: () => world.landmarks().map(m => ({ key: m.key, short: m.short, x: m.x, z: m.z,
@@ -907,7 +919,7 @@ window.merc = {
   winchOut: () => cableOut,
   teleport: (x, z) => {
     craft.x = x; craft.z = z; craft.y = world.groundHeight(x, z) + 16;
-    cameraFocus.set(x, 0, z);
+    cameraFocus.set(x, craft.y - 16, z);
     streamer.settle(x, z, 300);
     updateCamera(0, true);
     // Refresh the panel immediately: it is otherwise only redrawn on alternate quarter

@@ -3,6 +3,7 @@
     "The built bundle boots, streams the first chunks and renders",
     "The first-run briefing describes the region that was actually generated",
     "Real keyboard input flies the aircraft in the rendered world",
+    "The camera stays above the ground everywhere, including the highest ground in the region",
     "Nine regions with nine landmarks, and the readout changes as you cross them",
     "Every one of the nine landmarks streams in and builds without error",
     "The region map and the yard open, draw and close on real key presses",
@@ -43,10 +44,10 @@
       "pending": 0,
       "meshes": 108,
       "triangles": 47224,
-      "draw": 86,
-      "drawn": 43341,
+      "draw": 85,
+      "drawn": 43285,
       "fps": 60,
-      "streamMs": 0.05,
+      "streamMs": 0.1,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -58,7 +59,72 @@
       "regionNodes": 4508,
       "fog": 0.00085,
       "cable": 0,
-      "intro": true
+      "intro": true,
+      "cameraClearance": 156.6
+    },
+    "camera": {
+      "out": [
+        {
+          "x": 0,
+          "z": 0,
+          "clearance": 152.3
+        },
+        {
+          "x": -851,
+          "z": -483,
+          "clearance": 142.3
+        },
+        {
+          "x": -55,
+          "z": -467,
+          "clearance": 129
+        },
+        {
+          "x": 535,
+          "z": -516,
+          "clearance": 163.8
+        },
+        {
+          "x": -561,
+          "z": -202,
+          "clearance": 147.2
+        },
+        {
+          "x": -526,
+          "z": 424,
+          "clearance": 145.4
+        },
+        {
+          "x": 708,
+          "z": -118,
+          "clearance": 150.3
+        },
+        {
+          "x": -725,
+          "z": 487,
+          "clearance": 141.6
+        },
+        {
+          "x": 73,
+          "z": 468,
+          "clearance": 150.8
+        },
+        {
+          "x": 714,
+          "z": 334,
+          "clearance": 173.7
+        },
+        {
+          "x": 699,
+          "z": -83,
+          "clearance": 204.6
+        }
+      ],
+      "peak": {
+        "x": 699,
+        "z": -83,
+        "h": 146.2109686006118
+      }
     },
     "regions": [
       "basin",
@@ -86,7 +152,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 1.8071952163464318
+      "paidOut": 2.088359124418056
     },
     "job": {
       "cash": 5000,
@@ -118,7 +184,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0.01,
+      "worst": 0.02,
       "resident": 35,
       "nodes": 6190
     }

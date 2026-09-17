@@ -66,6 +66,35 @@ try {
   assert.ok(travelled > 8, `real keyboard input flies the aircraft: moved ${travelled.toFixed(1)} units`);
   record('Real keyboard input flies the aircraft in the rendered world');
 
+  // ---------------------------------------------------------------- the camera
+  // Every peak the generator can produce, from the lowest ground to the ceiling.
+  const clearances = await page.evaluate(() => {
+    const merc = window.merc, out = [];
+    const probes = [[0, 0]];
+    for (const mark of merc.marks()) probes.push([mark.x, mark.z]);
+    // Plus the highest ground anywhere in the region, wherever that turns out to be.
+    let peak = { x: 0, z: 0, h: -Infinity };
+    for (let z = -980; z < 980; z += 23) {
+      for (let x = -980; x < 980; x += 23) {
+        const h = merc.world.elevation(x, z);
+        if (h > peak.h) peak = { x, z, h };
+      }
+    }
+    probes.push([peak.x, peak.z]);
+    for (const [x, z] of probes) {
+      merc.teleport(x, z);
+      out.push({ x, z, clearance: merc.state().cameraClearance });
+    }
+    return { out, peak };
+  });
+  for (const probe of clearances.out) {
+    assert.ok(probe.clearance > 5,
+      `camera clearance at ${probe.x},${probe.z} is ${probe.clearance}`);
+  }
+  assert.ok(clearances.peak.h > 90, `the region has real mountains: peak ${clearances.peak.h.toFixed(0)}`);
+  evidence.measurements.camera = clearances;
+  record('The camera stays above the ground everywhere, including the highest ground in the region');
+
   // ---------------------------------------------------------------- regions
   const regions = await page.evaluate(() => window.merc.regions());
   assert.equal(regions.length, 9);
@@ -90,6 +119,11 @@ try {
     const near = await state();
     assert.ok(near.meshes > 8, `${mark.short} has geometry around it: ${near.meshes} meshes`);
     assert.ok(Number.isFinite(near.triangles) && near.triangles > 1000, `${mark.short} holds triangles`);
+    // The camera has to be above the ground it is looking at. THE EAR stands at over 150
+    // units on some seeds, and with the focus pinned to sea level the camera sat below the
+    // summit and rendered the inside of the mountain.
+    assert.ok(near.cameraClearance > 5,
+      `${mark.short}: camera is only ${near.cameraClearance} above the ground beneath it`);
     assert.deepEqual(evidence.errors, [], `${mark.short} builds without a JavaScript error`);
   }
   await page.screenshot({ path: 'artifacts/world-landmark.png' });
