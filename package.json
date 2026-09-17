@@ -7,8 +7,10 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node scripts/serve.mjs",
-    "test": "node --test tests/core.test.mjs tests/campaign.test.mjs",
-    "verify": "node tests/browser.mjs"
+    "test": "node --test tests/core.test.mjs tests/campaign.test.mjs tests/world.test.mjs tests/agency.test.mjs",
+    "verify": "node tests/browser.mjs",
+    "build:world": "node scripts/build-world.mjs",
+    "world": "node scripts/build-world.mjs && node scripts/serve.mjs"
   },
   "dependencies": {
     "three": "0.186.0"

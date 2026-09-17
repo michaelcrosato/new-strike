@@ -42,6 +42,13 @@ Importing the repository in the Vercel dashboard needs no extra configuration; `
 | Pause | Esc or P | Pause button |
 | Field manual / mute | H / V | Top buttons |
 
+## What is next: MERCENARY STRIKE
+
+An open-world successor is being built alongside this campaign: a single streamed 100 km²
+region, eight biomes, five factions, and a mercenary outfit you build from a makeshift yard.
+The world generator, chunk streamer and contract backend are in and tested — see
+[MERCENARY.md](MERCENARY.md) and run `npm run world`. The campaign below is untouched.
+
 ## The campaign
 
 Five operations, unlocked in order. The briefing screen selects any operation you have reached, and each keeps its own best score per difficulty.

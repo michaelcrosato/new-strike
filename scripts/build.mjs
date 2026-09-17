@@ -8,7 +8,7 @@ const result = await build({
 });
 let shell = await readFile('src/shell.html', 'utf8');
 const favicon = 'data:image/svg+xml,' + encodeURIComponent((await readFile('assets/favicon.svg', 'utf8')).trim());
-shell = shell.replace('__FAVICON__', favicon);
+shell = shell.replace('__FAVICON__', () => favicon);
 let css = await readFile('src/style.css', 'utf8');
 // Subset faces from assets/fonts, produced by scripts/make-fonts.mjs.
 const fonts = [
@@ -22,7 +22,7 @@ for (const [family,weight,path] of fonts) {
 }
 const notices = await Promise.all(['node_modules/three/LICENSE','node_modules/@fontsource/barlow/LICENSE','node_modules/@fontsource/barlow-condensed/LICENSE'].map(path=>readFile(path,'utf8')));
 await writeFile('THIRD_PARTY_NOTICES.txt',notices.join('\n\n'));
-const html = shell.replace('/* INLINE_STYLE */', css).replace('/* INLINE_GAME */', result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')).replace('</body>',`<script type="text/plain" id="third-party-notices">${notices.join('\n\n')}</script>\n</body>`);
+const html = shell.replace('/* INLINE_STYLE */', () => css).replace('/* INLINE_GAME */', () => result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')).replace('</body>', () => `<script type="text/plain" id="third-party-notices">${notices.join('\n\n')}</script>\n</body>`);
 await writeFile('dist/blockhawk.html', html);
 // Served by convention next to the game: browsers request /favicon.ico and iOS looks for
 // /apple-touch-icon.png without any markup, and crawlers follow og:image.
