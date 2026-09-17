@@ -7,10 +7,11 @@
 
 import { WORLD } from './worldgen.js';
 import { HOSTILE_TYPES, distance, damageHostile, hitCraft } from './combat.js';
+import { HOVER } from './flight.js';
 
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const ARRIVE = 44;            // close enough to count as over a place
-const LAND_SPEED = 9;         // hovering, not passing through
+const LAND_SPEED = HOVER;     // 40 km/h — hovering, not passing through at 162
 const PLANT_RANGE = 15;       // how close a charge has to be set
 const FUSE = 20;              // seconds between the last charge and the bang
 const BLAST = 62;             // how far clear of it you need to be

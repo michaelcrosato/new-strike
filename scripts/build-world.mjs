@@ -2,11 +2,29 @@
 // site serves at its root; the BLOCKHAWK campaign it grew out of keeps its own page.
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, copyFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
 await mkdir('dist', { recursive: true });
+// Everything that imports bare `three` is pointed at the WebGPU build, including the
+// addons. Without this the bundle would carry two copies of three — the WebGL one for
+// terrain and the addons, the WebGPU one for the renderer — with two sets of class
+// identities that do not recognise each other's geometry. Only the exact specifier is
+// redirected, so `three/tsl` and `three/addons/*` still resolve normally.
+const oneThree = {
+  name: 'single-three',
+  setup(build) {
+    build.onResolve({ filter: /^three$/ }, () => ({
+      path: fileURLToPath(import.meta.resolve('three/webgpu')),
+    }));
+  },
+};
+
 const result = await build({
   entryPoints: ['src/mercenary.js'], bundle: true, minify: true, write: false,
-  format: 'iife', target: ['es2022'], legalComments: 'inline',
+  // An ES module, not an IIFE: the renderer has to await its WebGPU adapter before anything
+  // can be drawn, and top-level await is not expressible in an IIFE.
+  format: 'esm', target: ['es2022'], legalComments: 'inline',
+  plugins: [oneThree],
 });
 let shell = await readFile('src/world-shell.html', 'utf8');
 const favicon = 'data:image/svg+xml,' + encodeURIComponent((await readFile('assets/favicon.svg', 'utf8')).trim());

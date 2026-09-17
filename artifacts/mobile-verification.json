@@ -62,10 +62,18 @@
         "pending": 0,
         "meshes": 108,
         "triangles": 47224,
-        "draw": 78,
-        "drawn": 36865,
-        "fps": 131,
-        "streamMs": 0.06,
+        "draw": 76,
+        "drawn": 36863,
+        "backend": "WebGPU",
+        "webgpu": true,
+        "speedKmh": 0,
+        "tint": "#fffaec",
+        "tintAmount": 0.158,
+        "exposure": 1.5,
+        "sun": 3.75,
+        "hemi": 1.78,
+        "fps": 94,
+        "streamMs": 0.03,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -75,7 +83,7 @@
         },
         "region": "savanna",
         "regionNodes": 6824,
-        "fog": 0.00085,
+        "fog": 0.00092,
         "cable": 0,
         "projectiles": 0,
         "intro": true,
@@ -85,7 +93,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 55.7
+          "ms": 67.1
         },
         "mapMs": 0,
         "cameraClearance": 156.6
@@ -129,10 +137,10 @@
         "vh": 844
       },
       "coveredPercent": 14,
-      "travelled": 45.8,
+      "travelled": 8.8,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 9.9
+        "cablePaid": 9.31
       },
       "pinchZoom": {
         "zoomStart": 4,
@@ -173,7 +181,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 151,
+          "ms": 153,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -192,7 +200,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 148,
+          "ms": 146,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -211,7 +219,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 148,
+          "ms": 146,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -232,7 +240,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 148,
+          "ms": 146,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -251,7 +259,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 148,
+          "ms": 146,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -270,7 +278,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 111,
+          "ms": 91,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -312,9 +320,17 @@
         "pending": 0,
         "meshes": 108,
         "triangles": 47224,
-        "draw": 87,
-        "drawn": 43997,
-        "fps": 133,
+        "draw": 85,
+        "drawn": 43995,
+        "backend": "WebGPU",
+        "webgpu": true,
+        "speedKmh": 0,
+        "tint": "#fff9eb",
+        "tintAmount": 0.17,
+        "exposure": 1.5,
+        "sun": 3.75,
+        "hemi": 1.78,
+        "fps": 94,
         "streamMs": 0.04,
         "stats": {
           "built": 66,
@@ -325,7 +341,7 @@
         },
         "region": "savanna",
         "regionNodes": 6824,
-        "fog": 0.00085,
+        "fog": 0.00092,
         "cable": 0,
         "projectiles": 0,
         "intro": true,
@@ -335,7 +351,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 54.7
+          "ms": 68.9
         },
         "mapMs": 0,
         "cameraClearance": 156.6
@@ -379,10 +395,10 @@
         "vh": 390
       },
       "coveredPercent": 20,
-      "travelled": 45.8,
+      "travelled": 9,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 10.09
+        "cablePaid": 9.68
       },
       "pinchZoom": {
         "zoomStart": 4,
@@ -423,7 +439,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 144,
+          "ms": 145,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -442,7 +458,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 144,
+          "ms": 142,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -461,7 +477,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 144,
+          "ms": 142,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -482,7 +498,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 144,
+          "ms": 142,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -501,7 +517,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 144,
+          "ms": 142,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -520,7 +536,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 106,
+          "ms": 87,
           "size": 709,
           "redraws": 3,
           "settled": false

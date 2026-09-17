@@ -10,8 +10,8 @@ the twelve kinds of job you fly.
 
 ```powershell
 npm run world          # builds the game and serves it
-npm test               # 125 checks across seven suites
-npm run verify:world   # 17 browser checks against the built bundle (server must be running)
+npm test               # 131 checks across eight suites
+npm run verify:world   # 20 browser checks against the built bundle (server must be running)
 ```
 
 Open **http://localhost:4189**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
@@ -223,21 +223,122 @@ combinations, so with fifty-odd settlements the same name landed twice on most s
 IRON SOUNDs on one map reads as a bug rather than as geography. One deterministic pass in cell
 order qualifies the later ones, so the map shows IRON SOUND and LOWER IRON SOUND.
 
-## Colour and light
+## The renderer — `src/stage.js`
 
-Biome boundaries are now **truly blended**, not dithered. Each vertex classifies itself and
-four probes either side of it in the classifier's own units; deep inside a biome all five
-agree and the colour is exact, and within about fifteen metres of a threshold the colour is
-the mixture. Every biome's three ground colours are converted to linear once at load, which
-makes a real blend cheaper than the single hard lookup it replaced.
+**WebGPU where the browser has it, WebGL 2 where it does not**, from one code path. three's
+`WebGPURenderer` picks its own backend and falls back on its own; `?webgl` forces the
+fallback, which is how both are exercised in the same browser and how the browser suite
+checks them against each other.
 
-The tone curve was chosen by measurement, not by eye. Sampling four places — the yard, the
-alpine ridge, the delta and the salt pans — AgX put 94% of the frame into two brightness
-buckets and averaged 0.41 saturation, which is exactly why every area looked like the same
-pale wash. Khronos PBR Neutral at exposure 1.6 holds the same mean brightness and peak,
-spreads the frame across four buckets, and carries **0.61 saturation — half again as much
-colour**. The salt pans now read as glare and the alpine ridge reads as darker than the
-savanna, instead of everything reading as haze.
+What that costs is that nothing in the pipeline can be GLSL any more. `EffectComposer`,
+`UnrealBloomPass`, `OutputPass` and a hand-written `ShaderPass` became one node graph, and
+the sea's `onBeforeCompile` string surgery became a node material — both now compile to WGSL
+or to GLSL depending on where they land. Two smaller consequences: the bundle is an ES module
+rather than an IIFE, because the renderer has to await a WebGPU adapter before anything can
+be drawn and top-level await is not expressible in an IIFE; and the manual
+`shadowMap.autoUpdate` / `needsUpdate` dance is gone, because `WebGPURenderer` decides for
+itself when its shadow maps need redrawing.
+
+The two backends are measured against each other rather than assumed equivalent. On the same
+seed, at the same place, they agree to within the noise:
+
+| | brightness | saturation | brightest pixel |
+| --- | --- | --- | --- |
+| WebGPU | 0.640 | 0.604 | 0.738 |
+| WebGL 2 | 0.638 | 0.609 | 0.736 |
+
+A fallback that renders something *different* is not a fallback, so the suite fails if they
+diverge by more than a few percent on any of those.
+
+The cost of carrying the WebGPU build of three is **702 KB → 1063 KB** for the single file.
+The bundle still holds exactly one copy of three: everything that imports the bare specifier,
+including the addons, is redirected to the WebGPU build by a resolver plugin, because two
+copies would mean two sets of class identities that do not recognise each other's geometry.
+
+## Colour and light — `src/look.js`
+
+Biome boundaries are **truly blended**, not dithered. Each vertex classifies itself and four
+probes either side of it in the classifier's own units; deep inside a biome all five agree
+and the colour is exact, and within about fifteen metres of a threshold the colour is the
+mixture. Every biome's three ground colours are converted to linear once at load, which makes
+a real blend cheaper than the single hard lookup it replaced.
+
+The look itself is measured against the original rather than chosen by eye. MERCENARY STRIKE
+had drifted grim — the light was down a third from the campaign it grew out of, and the frame
+was spending itself in two brightness buckets. So the campaign was measured first, as a
+target. Across four places, reading only the middle of the screen so neither game's interface
+counts:
+
+| | brightness | saturation | brightest pixel | brightness buckets in use |
+| --- | --- | --- | --- | --- |
+| BLOCKHAWK, the original | 0.499 | 0.335 | 0.848 | 4.8 |
+| this, before | 0.536 | 0.423 | 0.625 | 2.0 |
+| this, now | 0.561 | 0.560 | 0.780 | 3.5 |
+
+The surprise in that target is that the original is **neither brighter nor more saturated**
+than what this already had. What makes it feel upbeat is the last two columns: real
+highlights, and a frame that uses its range instead of pooling in the middle. Chasing
+saturation, which is what the previous pass did, was aimed at the wrong quantity.
+
+Three changes got there. The light went back to the campaign's own numbers — hemisphere 1.25
+to 1.78, sun 2.6 to 3.75, fill 0.5 to 0.66. The tone curve is Khronos PBR Neutral at exposure
+1.5; **AgX cannot get there from here at any setting**, and was measured across three light
+levels and four exposures to confirm it — every combination came back with two or three
+buckets in use and up to 81% of the frame in a single one. And bloom is set to the campaign's
+exact parameters (0.22 / 0.55 / 1.15), whose threshold sits above 1 so that it catches only
+what is genuinely over-bright in linear terms — snow, salt, glazing, a muzzle flash — and
+leaves the ground alone. Dropping that threshold far enough to catch terrain takes the frame
+to a mean of 0.9, which is measured, and is not what the original does.
+
+The remaining gap is the range: 3.5 buckets against the original's 4.8. An open landscape has
+fewer bright built accents than a campaign compound full of white buildings and orange
+markers, and that is most of it. Ambient occlusion — which the campaign runs in its Cinematic
+preset — is the obvious next lever and is not in yet.
+
+**Each area also carries its own tone**, which is what stops nine regions sharing one mood.
+Nine near-white tints, applied at a third strength and eased as you cross a border so the
+light changes with the country rather than at a line. Measured per place, the areas genuinely
+diverge:
+
+| area | brightness | saturation | reads as |
+| --- | --- | --- | --- |
+| THE SALT PANS | 0.68 | 0.60 | glare |
+| THE LONG SAVANNA | 0.63 | 0.64 | open, warm |
+| THE WHITE SPINE | 0.50 | 0.29 | cold, thin air |
+| THE GREEN DELTA | 0.44 | 0.71 | wet and lush |
+
+Weather takes the tint off for the job that carries it: its own mood wins. The grit and the
+dirt belong later, when the region has turned on you — the opening should look like a good
+day to be flying.
+
+## Flight — `src/flight.js`
+
+The aircraft used to cruise at **468 km/h and dash at 828**, which is a jet. It made a
+ten-kilometre region feel like a courtyard: the far corner was forty seconds away and the
+whole map was a minute wide.
+
+It now flies like the machine the game says it is:
+
+| | this | AH-64E | Mi-28N | Ka-52 | Tiger | AH-1Z |
+| --- | --- | --- | --- | --- | --- | --- |
+| cruise | **265 km/h** | 278 | 270 | 260 | 230 | 265 |
+| top | **315 km/h** | 293 | 320 | 300 | 290 | 300 |
+
+Which is what the region was always sized for. Crossing all ten kilometres takes **2 min 16 s**
+at cruise and 1 min 54 s flat out; a job on the far side is a real transit rather than a hop,
+and a contract's distance is something you feel instead of something you read off the board.
+
+Two details matter as much as the top figure. The machine takes **1.25 seconds** to answer the
+throttle rather than a third of one, and that delay is most of what makes the dash feel like a
+dash when it is only a fifth faster — it is also what stops three tonnes of helicopter changing
+direction like a car. And turning slows as you speed up, because a rotor that pivots on the
+spot in the hover has to fly a radius at three hundred kilometres an hour.
+
+Fuel follows. A full basic tank is **35 km at cruise — two and a half times the region's
+diagonal** — so anywhere on the map is reachable and back, and the gauge still matters.
+Dashing costs range, which is the trade it should be. And "hovering", which the winch and the
+scan both require, is now 40 km/h rather than the 162 it used to be: you could previously
+winch a survivor aboard on a fast pass.
 
 ## The outfit — `src/agency.js`
 
@@ -351,8 +452,14 @@ weapon tiles, and a rail down the right edge for the work, the map, the yard and
 home. Both aspect ratios a phone has are laid out and tested: 9:16 held upright and 16:9
 turned over.
 
-Not yet: no interiors or ground-level detail (the camera never gets close enough to need
-them), no weather beyond the one complication, no day/night cycle, and no persistent
+Also wired: the renderer, on WebGPU where the browser has it and WebGL 2 where it does not,
+both from one code path and both measured against each other; the upbeat look, tuned against
+the original's own numbers; a tone per area; and a flight model at a modern gunship's cruise
+and top speed.
+
+Not yet: no ambient occlusion, which is the missing lever on tonal range and which the
+campaign has; no interiors or ground-level detail (the camera never gets close enough to need
+them); no weather beyond the one complication; no day/night cycle; and no persistent
 consequences for a faction beyond its standing number — a faction you have ruined does not
 yet visibly lose ground on the map.
 
@@ -388,12 +495,13 @@ which was long enough for the browser to throw away the next tap.
 
 ## Verification
 
-- **125 module checks** across seven suites: the campaign parity harness, the campaign
+- **131 module checks** across eight suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
   layer with its landmarks and place names, and the newer four kinds with their complications.
 - **18 browser checks** (`npm run verify:world`) against the built single file served at the
-  site root: it boots and renders, the briefing describes the generated region, real keyboard
-  input flies the aircraft, the camera stays above the ground everywhere including the highest
+  site root: it boots and renders on both backends to the same picture, the briefing describes
+  the generated region, the frame keeps the original's upbeat range and each area carries its
+  own tone, real keyboard input flies the aircraft at a gunship's cruise and top speed, the camera stays above the ground everywhere including the highest
   ground the sweep can find, nine regions and nine landmarks exist and the readout changes as
   you cross them, every landmark streams in without error, the zoom ladder reaches exactly
   eight times the default with the far field filling it, the coarse mesh stays under the

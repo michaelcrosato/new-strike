@@ -47,6 +47,12 @@ across the screen to 7.4 kilometres, by wheel, by key, or by pinching the world.
 past the streamed chunks is one coarse mesh of the whole region, built once, so pulling back
 never stalls.
 
+It renders on **WebGPU** where the browser has it and **WebGL 2** where it does not, from one
+code path — `?webgl` forces the fallback, and the two are measured against each other rather
+than assumed equivalent. The aircraft flies at a modern gunship's speeds, **265 km/h cruise
+and 315 flat out**, which is what the ten-kilometre region was always sized for: crossing all
+of it takes a little over two minutes.
+
 The **region map pans and zooms** through five steps of its own, from the whole ten kilometres
 down to 625 metres across — drag to pan, pinch or wheel to zoom about the point you are
 looking at, `0` for the whole region. It redraws the terrain for the window it is showing

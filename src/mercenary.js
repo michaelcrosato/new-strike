@@ -5,12 +5,10 @@
 // progression hang off this loop; the point of this file is that the world underneath it
 // holds up while you fly across ten kilometres of it.
 
-import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import * as THREE from 'three/webgpu';
+import { createRenderer, createPost, createSeaMaterial, backendName, frameDrawCalls, forcedWebGL, TONES } from './stage.js';
+import { LOOK, REGION_GRADE, GRADE_STRENGTH } from './look.js';
+import { FLIGHT, CRUISE, TOP, unitsToKmh } from './flight.js';
 import { createWorld, WORLD, BIOMES, FACTIONS } from './worldgen.js';
 import { ChunkStreamer, desiredChunks } from './streaming.js';
 import { buildChunk, createMaterials } from './terrain.js';
@@ -55,38 +53,35 @@ function onTap(element, action) {
   });
 }
 
+// Slow enough over your own pad to count as parked, rather than passing through.
+const HOVER_SERVICE = 3.2;
+
 const seed = Number(new URLSearchParams(location.search).get('seed') ?? 20492) || 20492;
 const world = createWorld(seed);
 const home = world.home;
 
 // ---------------------------------------------------------------- renderer
-const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: false, powerPreference: 'high-performance' });
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-// Measured, not chosen by eye. Over four places in the region — the yard, the alpine
-// ridge, the delta and the salt pans — AgX put 94% of the frame into two brightness
-// buckets and averaged 0.41 saturation, which is why every area looked like the same pale
-// wash. Neutral at this exposure holds the same mean brightness and peak, spreads the
-// frame over four buckets, and carries 0.61 saturation: half again as much colour, which
-// is what lets nine regions read as nine places.
-renderer.toneMapping = THREE.NeutralToneMapping;
-renderer.toneMappingExposure = 1.6;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;   // PCFSoft was removed in three r186
-renderer.shadowMap.autoUpdate = false;          // driven once per frame, not once per pass
-renderer.info.autoReset = false;
+// One renderer, two backends: WebGPU where the browser has it, WebGL 2 where it does not.
+// `?webgl` forces the fallback so both can be exercised in the same browser. The await is
+// why this bundle is an ES module — WebGPU needs an adapter and a device before anything
+// can be drawn.
+const renderer = await createRenderer($('scene'));
+const backend = backendName(renderer);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x8aa6a0);
-// Tuned for this camera distance: crisp underneath, fading only as chunks approach the
-// edge of the streamed set, which doubles as the horizon.
-scene.fog = new THREE.FogExp2(0x9fb3ad, 0.00085);
+scene.background = new THREE.Color(LOOK.sky);
+// Thin enough that ten kilometres of ground stays legible, and bright enough that the
+// distance reads as air rather than as murk.
+scene.fog = new THREE.FogExp2(LOOK.fog.colour, LOOK.fog.density);
 
 const camera = new THREE.OrthographicCamera(-75, 75, 45, -45, 0.5, 900);
 const cameraOffset = new THREE.Vector3(112, 142, 138);
 const cameraFocus = new THREE.Vector3(home.x, home.height, home.z);
 
-scene.add(new THREE.HemisphereLight(0xb9d2cc, 0x54604a, 1.25));
-const sun = new THREE.DirectionalLight(0xffe2ae, 2.6);
+// The campaign's own lighting, which is the look this is returning to. It had been dimmed
+// by about a third here, and that — not the tone curve — is what made the region grim.
+scene.add(new THREE.HemisphereLight(LOOK.hemi.sky, LOOK.hemi.ground, LOOK.hemi.intensity));
+const sun = new THREE.DirectionalLight(LOOK.sun.colour, LOOK.sun.intensity);
 sun.position.set(-90, 150, 80);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -94,26 +89,14 @@ Object.assign(sun.shadow.camera, { left: -110, right: 110, top: 110, bottom: -11
 sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.5;
 scene.add(sun, sun.target);
-const fill = new THREE.DirectionalLight(0x9fc9cf, 0.5);
+const fill = new THREE.DirectionalLight(LOOK.fill.colour, LOOK.fill.intensity);
 fill.position.set(80, 60, -70);
 scene.add(fill);
 
 // ---------------------------------------------------------------- sea
-const seaMaterial = new THREE.MeshStandardMaterial({ color: 0x11585f, roughness: 0.26, metalness: 0.34 });
-const seaTime = { value: 0 };
-seaMaterial.onBeforeCompile = shader => {
-  shader.uniforms.uTime = seaTime;
-  shader.vertexShader = 'varying vec3 vSea;\n' + shader.vertexShader.replace('#include <worldpos_vertex>',
-    '#include <worldpos_vertex>\nvSea = (modelMatrix * vec4(transformed,1.)).xyz;');
-  shader.fragmentShader = 'uniform float uTime; varying vec3 vSea;\n' + shader.fragmentShader
-    .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-      vec2 q = vSea.xz;
-      float ripple = sin(q.x * .7 + q.y * .35 + uTime * 1.2) * .03 + sin(q.y * 1.7 - q.x * .2 + uTime * 1.5) * .014;
-      normal = normalize(normal + vec3(ripple, ripple * .3, ripple * .8));`)
-    .replace('#include <color_fragment>', `#include <color_fragment>
-      float swell = sin(vSea.x * .02 + vSea.z * .03 + uTime * .2) * .07;
-      diffuseColor.rgb *= 1.0 + swell;`);
-};
+// A node material now, because `onBeforeCompile` string surgery on GLSL cannot follow us to
+// WebGPU. Same two crossing ripples and the same slow swell, expressed as a graph.
+const seaMaterial = createSeaMaterial();
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.size * 2, WORLD.size * 2), seaMaterial);
 sea.rotation.x = -Math.PI / 2;
 sea.position.y = WORLD.seaLevel;
@@ -605,13 +588,25 @@ function flight(dt) {
   const len = Math.hypot(mx, mz);
   if (len > 1) { mx /= len; mz /= len; }
   const boost = held.has('ShiftLeft') || held.has('ShiftRight') || stick.boost;
-  const speed = boost ? 46 : 26;
-  const drag = 1 - Math.exp(-3.4 * dt);
+  // Cruise where you left the throttle, top speed with SHIFT. Both are real numbers for a
+  // modern gunship rather than the jet speeds this used to fly at; see src/flight.js.
+  const speed = boost ? TOP : CRUISE;
+  // A time constant in seconds, not a third of one. The delay in answering the throttle is
+  // most of what makes the dash feel like a dash when it is only a fifth faster, and it is
+  // what stops three tonnes of helicopter changing direction like a car.
+  const drag = 1 - Math.exp(-dt / FLIGHT.spoolSeconds);
   craft.vx += (mx * speed - craft.vx) * drag;
   craft.vz += (mz * speed - craft.vz) * drag;
   craft.x = clamp(craft.x + craft.vx * dt, -WORLD.half, WORLD.half);
   craft.z = clamp(craft.z + craft.vz * dt, -WORLD.half, WORLD.half);
-  if (len > 0.08) craft.yaw += Math.atan2(Math.sin(Math.atan2(mx, -mz) - craft.yaw), Math.cos(Math.atan2(mx, -mz) - craft.yaw)) * (1 - Math.exp(-6 * dt));
+  if (len > 0.08) {
+    // Slower the faster you are going: a rotor that pivots on the spot in the hover has to
+    // fly a radius at three hundred kilometres an hour.
+    const pace = clamp(Math.hypot(craft.vx, craft.vz) / TOP, 0, 1);
+    const rate = FLIGHT.yawRate.hover + (FLIGHT.yawRate.top - FLIGHT.yawRate.hover) * pace;
+    const wantedYaw = Math.atan2(mx, -mz);
+    craft.yaw += Math.atan2(Math.sin(wantedYaw - craft.yaw), Math.cos(wantedYaw - craft.yaw)) * (1 - Math.exp(-rate * dt));
+  }
 
   // Terrain following: hold a clearance over whatever is below, climb fast, sink slowly.
   const ground = world.groundHeight(craft.x, craft.z);
@@ -630,12 +625,12 @@ function flight(dt) {
   // Fuel burns while flying and tops up over your own pad.
   const home = world.home;
   const overYard = Math.hypot(craft.x - home.x, craft.z - home.z) < 40;
-  if (overYard && Math.hypot(craft.vx, craft.vz) < 10) {
+  if (overYard && Math.hypot(craft.vx, craft.vz) < HOVER_SERVICE) {
     combat.fuel = Math.min(combat.maxFuel, combat.fuel + 26 * dt * (1 + profile.base.fuel));
     combat.armour = Math.min(combat.maxArmour, combat.armour + 14 * dt * (1 + profile.base.workshop));
     for (const w of availableWeapons(profile.heli)) combat.ammo[w.id] = Math.min(w.max, (combat.ammo[w.id] ?? 0) + w.max / 6 * dt);
   } else {
-    combat.fuel = Math.max(0, combat.fuel - dt * (boost ? 0.55 : 0.34));
+    combat.fuel = Math.max(0, combat.fuel - dt * (boost ? FLIGHT.burn.dash : FLIGHT.burn.cruise));
     if (combat.fuel <= 0) loseAircraft();
   }
   combat.invulnerable = Math.max(0, (combat.invulnerable ?? 0) - dt);
@@ -673,9 +668,12 @@ function updateWinch(dt) {
 
 // Weather is a complication, not a simulation: one job in a few arrives with the
 // visibility going, and it closes in and lifts again with the contract.
-const CLEAR = { fog: 0.00085, sun: 2.6, sky: 0x8aa6a0, tint: 0x9fb3ad };
-const CLOSED = { fog: 0.0027, sun: 1.55, sky: 0x74837f, tint: 0x8b9a96 };
+const CLEAR = { fog: LOOK.fog.density, sun: LOOK.sun.intensity, hemi: LOOK.hemi.intensity,
+  sky: LOOK.sky, tint: LOOK.fog.colour };
+const CLOSED = { fog: LOOK.closing.density, sun: LOOK.closing.sun, hemi: LOOK.closing.hemi,
+  sky: LOOK.closing.sky, tint: LOOK.closing.fog };
 const skyColour = new THREE.Color(), fogColour = new THREE.Color();
+const hemisphere = scene.children.find(o => o.isHemisphereLight);
 function updateWeather(dt) {
   const closing = !!mission?.weather;
   const want = closing ? CLOSED : CLEAR;
@@ -686,9 +684,26 @@ function updateWeather(dt) {
   const reach = want.fog / (1 + (zoom - 1) * 0.62);
   scene.fog.density += (reach - scene.fog.density) * rate;
   sun.intensity += (want.sun - sun.intensity) * rate;
+  hemisphere.intensity += (want.hemi - hemisphere.intensity) * rate;
   skyColour.setHex(want.sky); fogColour.setHex(want.tint);
   scene.background.lerp(skyColour, rate);
   scene.fog.color.lerp(fogColour, rate);
+}
+
+// Each area gets its own tone without the game getting a new mood: a near-white tint at a
+// third strength, eased as you cross the border so the light changes with the country
+// rather than at a line. Weather takes the tint off — its own mood wins.
+const regionTint = new THREE.Color(0xffffff), wantTint = new THREE.Color(0xffffff);
+let tintAt = 0;
+function updateTone(dt) {
+  const here = world.regionAt(craft.x, craft.z);
+  wantTint.setHex(REGION_GRADE[here.key] ?? 0xffffff);
+  const rate = 1 - Math.exp(-1.1 * dt);
+  regionTint.lerp(wantTint, rate);
+  const want = mission?.weather ? 0 : GRADE_STRENGTH;
+  tintAt += (want - tintAt) * rate;
+  stage.uniforms.tint.value.copy(regionTint);
+  stage.uniforms.tintAmount.value = tintAt;
 }
 
 // ---------------------------------------------------------------- zoom
@@ -705,7 +720,9 @@ const OVERVIEW_FROM = 1.3;
 let zoomStep = ZOOM_DEFAULT;
 let zoom = ZOOM_STEPS[zoomStep];
 
-const baseView = () => 104 + Math.hypot(craft.vx, craft.vz) * 0.55;
+// The view opens up a little with speed. The coefficient is higher than it was because
+// the speeds are lower: at the old one, cruise and top looked the same.
+const baseView = () => 104 + Math.hypot(craft.vx, craft.vz) * 1.5;
 // How much ground the frame covers vertically, in world units. The map reads this to draw
 // the view rectangle, so the two can never disagree about what you can see.
 function viewHeight() { return baseView() * zoom; }
@@ -800,29 +817,14 @@ function updateCamera(dt, snap = false) {
 }
 
 // ---------------------------------------------------------------- post
-// Let the composer allocate its own buffers. A hand-made WebGLRenderTarget here had a
-// depth attachment the scene render could not pass, so every frame came out as bare
-// background with the geometry silently depth-rejected.
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.6, 1.1);
-composer.addPass(bloom);
-composer.addPass(new OutputPass());
-composer.addPass(new ShaderPass({
-  uniforms: { tDiffuse: { value: null } },
-  vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-  fragmentShader: `uniform sampler2D tDiffuse;varying vec2 vUv;
-    void main(){vec3 c=texture2D(tDiffuse,vUv).rgb;vec2 p=vUv*2.-1.;
-    c*=1.-dot(p,p)*.10;c=mix(vec3(dot(c,vec3(.2126,.7152,.0722))),c,1.12);
-    gl_FragColor=vec4((c-.5)*1.04+.5,1.);}`,
-}));
+// Bloom, then tone mapping, then the grade — one node graph instead of four passes of
+// GLSL, so the same chain compiles to WGSL or GLSL depending on the backend underneath.
+let stage = createPost(renderer, scene, camera);
 
 function resize() {
   const ratio = Math.min(devicePixelRatio || 1, 1.6);
   renderer.setPixelRatio(ratio);
-  composer.setPixelRatio(ratio);
   renderer.setSize(innerWidth, innerHeight, false);
-  composer.setSize(innerWidth, innerHeight);
   // Turning a phone over changes the box the map gets, and the map is drawn to fit it.
   if (!$('map-panel').hidden && sizeMapCanvas()) refreshMap();
 }
@@ -1475,15 +1477,14 @@ function frame(now) {
   updateCamera(dt);
   heli.rotor.rotation.y = clock * 34;
   heli.tail.rotation.x = clock * 44;
-  seaTime.value = clock;
   updateWinch(dt);
   updateMarker();
   updateWeather(dt);
+  updateTone(dt);
   audio.update(Math.hypot(craft.vx, craft.vz), 'playing');
 
-  renderer.shadowMap.needsUpdate = true;
   renderer.info.reset();
-  composer.render();
+  stage.render();
 
   updateActive(dt);
   if ($('flash') && !$('flash').hidden && performance.now() > flashUntil) $('flash').hidden = true;
@@ -1496,7 +1497,7 @@ function updateReadout(streamed) {
   const km = v => (v * WORLD.metresPerUnit / 1000).toFixed(2);
   $('pos').textContent = `${km(craft.x)} , ${km(craft.z)} km`;
   $('alt').textContent = `${Math.round((craft.y - s.height) * WORLD.metresPerUnit)} m AGL`;
-  $('speed').textContent = `${Math.round(Math.hypot(craft.vx, craft.vz) * WORLD.metresPerUnit * 3.6)} km/h`;
+  $('speed').textContent = `${Math.round(unitsToKmh(Math.hypot(craft.vx, craft.vz)))} / ${FLIGHT.topKmh} km/h`;
   $('biome').textContent = BIOMES[s.biome].name;
   const region = world.regionAt(craft.x, craft.z);
   $('region').textContent = region.name;
@@ -1513,7 +1514,7 @@ function updateReadout(streamed) {
     : 'NOTHING WITHIN 1.6 KM';
   $('chunks').textContent = `${streamer.resident.size} resident · ${streamed.pending} queued · ${streamer.stats.built} built · ${streamer.stats.disposed} released`;
   $('geometry').textContent = `${residentMeshes} meshes · ${Math.round(residentTriangles / 1000)}k triangles held`;
-  $('draw').textContent = `${renderer.info.render.calls} calls · ${Math.round(renderer.info.render.triangles / 1000)}k drawn`;
+  $('draw').textContent = `${frameDrawCalls(renderer)} calls · ${Math.round(renderer.info.render.triangles / 1000)}k drawn`;
   $('fps').textContent = `${Math.round(fps)} fps · stream ${buildHitch.toFixed(1)} ms/frame`;
   const across = viewHeight() * (innerWidth / innerHeight) * WORLD.metresPerUnit / 1000;
   $('view').textContent = `${ZOOM_STEPS[zoomStep].toFixed(2).replace(/0$/, '')}× · ${across.toFixed(2)} km across`;
@@ -1532,7 +1533,7 @@ try {
   $('seed').textContent = String(seed);
   streamer.settle(craft.x, craft.z, 300);
   updateCamera(0, true);
-  composer.render();
+  stage.render();
   refreshBoard();
   renderOutfit();
   renderWeapons();
@@ -1554,14 +1555,18 @@ window.merc = {
   outfit: () => ({ cash: profile.cash, day: profile.day, standing: { ...profile.standing },
     active: profile.active && { title: profile.active.title, reached: !!profile.active.reached },
     completed: profile.completed.length, board: board.length, quill: situation(profile) }),
-  renderer, scene, camera, composer, sun, materials, heli, sea,
-  raw: () => { renderer.setRenderTarget(null); renderer.clear(); renderer.render(scene, camera); },
+  renderer, scene, camera, stage, sun, materials, heli, sea, backend,
+  raw: () => { renderer.render(scene, camera); },
   state: () => ({
     seed, position: { x: craft.x, z: craft.z, y: craft.y },
     sample: world.sample(craft.x, craft.z),
     resident: streamer.resident.size, pending: streamer.queue.length,
     meshes: residentMeshes, triangles: Math.round(residentTriangles),
-    draw: renderer.info.render.calls, drawn: renderer.info.render.triangles,
+    draw: frameDrawCalls(renderer), drawn: renderer.info.render.triangles,
+    backend, webgpu: backend === 'WebGPU',
+    speedKmh: Math.round(unitsToKmh(Math.hypot(craft.vx, craft.vz))),
+    tint: '#' + regionTint.getHexString(), tintAmount: +tintAt.toFixed(3),
+    exposure: renderer.toneMappingExposure, sun: +sun.intensity.toFixed(2), hemi: +hemisphere.intensity.toFixed(2),
     fps: Math.round(fps), streamMs: +buildHitch.toFixed(2),
     stats: { ...streamer.stats },
     region: world.regionAt(craft.x, craft.z).key,
@@ -1583,6 +1588,32 @@ window.merc = {
     height: +m.height.toFixed(1), region: m.region })),
   intro: () => { showIntro(); return true; },
   zoomTo: step => { setZoom(step, true); updateCamera(0, true); return ZOOM_STEPS[zoomStep]; },
+  // The tone curve and the exposure, live. The node graph reads the curve when it is built,
+  // so changing it rebuilds the chain.
+  tone: (name, exposure = null) => {
+    if (name && TONES[name] !== undefined) renderer.toneMapping = TONES[name];
+    if (exposure !== null) renderer.toneMappingExposure = exposure;
+    stage = createPost(renderer, scene, camera);
+    updateTone(1);
+    stage.render();
+    return { tone: name, exposure: renderer.toneMappingExposure };
+  },
+  // The grade and the bloom are uniforms, so these take effect without rebuilding anything.
+  grade: (values = {}) => {
+    for (const [key, value] of Object.entries(values)) {
+      if (stage.uniforms[key]) stage.uniforms[key].value = value;
+      else if (stage.bloom?.[key]) stage.bloom[key].value = value;
+    }
+    stage.render();
+    return { vignette: stage.uniforms.vignette.value, saturation: stage.uniforms.saturation.value,
+      contrast: stage.uniforms.contrast.value, strength: stage.bloom?.strength?.value,
+      radius: stage.bloom?.radius?.value, threshold: stage.bloom?.threshold?.value };
+  },
+  light: (sunAt, hemiAt) => {
+    if (sunAt !== undefined) { sun.intensity = sunAt; CLEAR.sun = sunAt; }
+    if (hemiAt !== undefined) { hemisphere.intensity = hemiAt; CLEAR.hemi = hemiAt; }
+    return { sun: sun.intensity, hemi: hemisphere.intensity };
+  },
   zoomSteps: () => [...ZOOM_STEPS],
   farField: () => buildFarField() && { triangles: overview.triangles, vertices: overview.vertices, ms: overview.ms },
   map: () => { if (!mapDrawn) drawMap(); return { ms: +mapMs.toFixed(0), drawn: mapDrawn }; },
@@ -1616,6 +1647,7 @@ window.merc = {
       updateWinch(step);
       updateMarker();
       updateWeather(step);
+      updateTone(step);
       streamer.update(craft.x, craft.z);
     }
     keys.clear();
@@ -1647,7 +1679,7 @@ window.merc = {
     // seconds, so a screenshot taken straight after a jump could show the old position.
     updateReadout({ pending: streamer.queue.length });
   },
-  render: () => { renderer.info.reset(); renderer.shadowMap.needsUpdate = true; composer.render(); },
+  render: () => { renderer.info.reset(); stage.render(); },
   desired: () => desiredChunks(craft.x, craft.z).length,
   drawMap,
 };

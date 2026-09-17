@@ -9,6 +9,7 @@
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { measureFrame, mean } from '../tools/frame-stats.mjs';
 
 const base = 'http://127.0.0.1:4189';
 // The game is what the site serves at its root, so that is where it is tested.
@@ -43,6 +44,7 @@ try {
   evidence.measurements.boot = booted;
   record('The built bundle boots, streams the first chunks and renders');
 
+
   // ---------------------------------------------------------------- the briefing
   assert.equal(await page.locator('#intro').isVisible(), true, 'a first visit gets a briefing');
   const brief = await page.locator('#intro-quill').textContent();
@@ -57,15 +59,122 @@ try {
   assert.equal(await page.locator('#intro').isVisible(), false, 'and it dismisses');
   record('The first-run briefing describes the region that was actually generated');
 
+  // ---------------------------------------------------------------- the backends
+  // One renderer, two backends: WebGPU where the browser has it, WebGL 2 where it does not.
+  // Both are exercised here, and the frames they produce are compared, because a fallback
+  // that renders something *different* is not a fallback.
+  const hasWebGPU = await page.evaluate(() => !!navigator.gpu);
+  assert.equal(booted.backend, hasWebGPU ? 'WebGPU' : 'WebGL2',
+    `a browser with WebGPU should use it: navigator.gpu is ${hasWebGPU}, backend is ${booted.backend}`);
+  await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+  await page.waitForTimeout(500);
+  const primaryFrame = await measureFrame(page);
+
+  const fallback = await context.newPage();
+  fallback.on('pageerror', e => evidence.errors.push('fallback: ' + e.message));
+  fallback.on('console', m => { if (m.type() === 'error') evidence.errors.push('fallback: ' + m.text()); });
+  await fallback.goto(`${url(SEED)}&webgl`);
+  await fallback.waitForFunction(() => window.merc && window.merc.state().resident > 20, null, { timeout: 30000 });
+  const fallbackState = await fallback.evaluate(() => window.merc.state());
+  assert.equal(fallbackState.backend, 'WebGL2', 'forcing the fallback gives the WebGL 2 backend');
+  await fallback.evaluate(() => { window.merc.dismiss(); window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z); });
+  await fallback.waitForTimeout(400);
+  const fallbackFrame = await measureFrame(fallback);
+
+  // The two backends run the same node graphs, so the images should agree closely. A large
+  // divergence means one of them is not applying the tone curve, the grade or the lighting.
+  for (const [key, tolerance] of [['lum', 0.05], ['sat', 0.07], ['max', 0.08]]) {
+    const gap = Math.abs(primaryFrame[key] - fallbackFrame[key]);
+    assert.ok(gap < tolerance,
+      `${booted.backend} and WebGL2 disagree on ${key}: ${primaryFrame[key].toFixed(3)} vs ${fallbackFrame[key].toFixed(3)}`);
+  }
+  assert.ok(fallbackState.resident > 40, 'and the fallback streams the world the same way');
+  await fallback.close();
+  evidence.measurements.backends = {
+    primary: booted.backend, hasWebGPU,
+    primaryFrame: { lum: +primaryFrame.lum.toFixed(3), sat: +primaryFrame.sat.toFixed(3), max: +primaryFrame.max.toFixed(3), spread: primaryFrame.spread },
+    fallbackFrame: { lum: +fallbackFrame.lum.toFixed(3), sat: +fallbackFrame.sat.toFixed(3), max: +fallbackFrame.max.toFixed(3), spread: fallbackFrame.spread },
+  };
+  record(`Renders on ${booted.backend} and on the WebGL 2 fallback, to the same picture`);
+
+  // ---------------------------------------------------------------- the look
+  // A guard against the region drifting grim again. BLOCKHAWK — the look this returned to —
+  // measures lum 0.499, sat 0.335, max 0.848 and a spread of 4.8 brightness buckets across
+  // four places. What makes it upbeat is the highlights and the range, not the brightness:
+  // the pale wash this became had a spread of 2 and a max of 0.63.
+  const places = [null, 'saltflat', 'alpine', 'delta'];
+  const frames = [];
+  for (const key of places) {
+    await page.evaluate(k => {
+      const merc = window.merc;
+      if (!k) merc.teleport(merc.world.home.x, merc.world.home.z);
+      else { const r = merc.regions().find(x => x.key === k); merc.teleport(Math.round(r.x), Math.round(r.z)); }
+      merc.simulate(0.5, {});
+    }, key);
+    await page.waitForTimeout(250);
+    frames.push(await measureFrame(page));
+  }
+  const look = {
+    lum: mean(frames, f => f.lum), sat: mean(frames, f => f.sat),
+    max: mean(frames, f => f.max), spread: mean(frames, f => f.spread),
+    clipped: mean(frames, f => f.clipped),
+  };
+  console.log('    look:', JSON.stringify({ lum: +look.lum.toFixed(3), sat: +look.sat.toFixed(3),
+    max: +look.max.toFixed(3), spread: +look.spread.toFixed(2), clipped: +look.clipped.toFixed(2) }));
+  for (let i = 0; i < frames.length; i++) {
+    console.log(`      ${(places[i] ?? 'the yard').padEnd(10)} lum ${frames[i].lum.toFixed(2)} sat ${frames[i].sat.toFixed(2)} max ${frames[i].max.toFixed(2)} spread ${frames[i].spread}`);
+  }
+  assert.ok(look.max > 0.75, `the frame needs real highlights: max is ${look.max.toFixed(3)}`);
+  assert.ok(look.spread >= 3.4, `the frame needs tonal range: only ${look.spread.toFixed(1)} brightness buckets carry it`);
+  assert.ok(look.lum > 0.40 && look.lum < 0.66, `brightness is ${look.lum.toFixed(3)}`);
+  assert.ok(look.sat > 0.33, `and colour: saturation is ${look.sat.toFixed(3)}`);
+  assert.ok(look.clipped < 3, `without blowing out: ${look.clipped.toFixed(1)}% of the frame is clipped`);
+  // Each area has its own tone, which is the point of the region grade.
+  const tones = await page.evaluate(() => {
+    const out = [];
+    for (const r of window.merc.regions()) {
+      window.merc.teleport(Math.round(r.x), Math.round(r.z));
+      window.merc.simulate(2.5, {});
+      out.push({ key: r.key, tint: window.merc.state().tint, amount: window.merc.state().tintAmount });
+    }
+    return out;
+  });
+  assert.equal(new Set(tones.map(t => t.tint)).size, 9, 'nine areas, nine tones');
+  assert.ok(tones.every(t => t.amount > 0.2), 'and the grade is actually applied in each');
+  evidence.measurements.look = {
+    lum: +look.lum.toFixed(3), sat: +look.sat.toFixed(3), max: +look.max.toFixed(3),
+    spread: +look.spread.toFixed(1), clipped: +look.clipped.toFixed(2),
+    perPlace: frames.map((f, i) => ({ place: places[i] ?? 'the yard', lum: +f.lum.toFixed(2), sat: +f.sat.toFixed(2), max: +f.max.toFixed(2), spread: f.spread })),
+    tones,
+  };
+  record('The frame keeps the original upbeat range, and each area carries its own tone');
+
   // ---------------------------------------------------------------- real input
+  // Held for long enough to actually reach cruise. The machine now takes a second and a
+  // quarter to answer the throttle, so a 900 ms hold — which is what this used to be —
+  // covers under four units and says nothing about whether it flies.
   const before = await state();
   await page.keyboard.down('w');
-  await page.waitForTimeout(900);
+  await page.waitForTimeout(5200);
+  const moving = await state();
   await page.keyboard.up('w');
-  const after = await state();
-  const travelled = Math.hypot(after.position.x - before.position.x, after.position.z - before.position.z);
-  assert.ok(travelled > 8, `real keyboard input flies the aircraft: moved ${travelled.toFixed(1)} units`);
-  record('Real keyboard input flies the aircraft in the rendered world');
+  const travelled = Math.hypot(moving.position.x - before.position.x, moving.position.z - before.position.z);
+  assert.ok(travelled > 20, `real keyboard input flies the aircraft: moved ${travelled.toFixed(1)} units`);
+  // And it reaches the speed a gunship of this class cruises at, not a jet's.
+  assert.ok(moving.speedKmh > 250 && moving.speedKmh < 285,
+    `settles at ${moving.speedKmh} km/h, which should be the cruise of a modern gunship`);
+  await page.keyboard.down('w');
+  await page.keyboard.down('Shift');
+  await page.waitForTimeout(4200);
+  const dashing = await state();
+  await page.keyboard.up('Shift');
+  await page.keyboard.up('w');
+  assert.ok(dashing.speedKmh > moving.speedKmh,
+    `the dash is faster than the cruise: ${dashing.speedKmh} vs ${moving.speedKmh} km/h`);
+  assert.ok(dashing.speedKmh >= 300 && dashing.speedKmh <= 320,
+    `and tops out at a helicopter's speed, not a jet's: ${dashing.speedKmh} km/h`);
+  evidence.measurements.flight = { cruiseKmh: moving.speedKmh, dashKmh: dashing.speedKmh, travelled: +travelled.toFixed(1) };
+  record('Real keyboard input flies the aircraft at a modern gunship cruise and top speed');
 
   // ---------------------------------------------------------------- the camera
   // Every peak the generator can produce, from the lowest ground to the ceiling.

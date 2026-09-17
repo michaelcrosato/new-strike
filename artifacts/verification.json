@@ -45,7 +45,7 @@
       ]
     },
     "performance": {
-      "fps": 130,
+      "fps": 144,
       "quality": "cinematic",
       "pixelRatio": 1,
       "drawCalls": 504,
@@ -56,11 +56,11 @@
   },
   "mobile": {
     "landscape": {
-      "fps": 125,
+      "fps": 77,
       "quality": "mobile",
       "pixelRatio": 1.3,
-      "drawCalls": 157,
-      "triangles": 49691,
+      "drawCalls": 158,
+      "triangles": 49703,
       "ready": true,
       "touch": true
     }
