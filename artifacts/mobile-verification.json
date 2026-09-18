@@ -95,17 +95,17 @@
           "visible": true
         },
         "toAircraft": 5,
-        "rotor": 0.576,
+        "rotor": 0.568,
         "teaching": "yard",
         "teachingDone": false,
         "mapOpened": false,
         "tint": "#fffaee",
-        "tintAmount": 0.145,
+        "tintAmount": 0.148,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
         "fps": 94,
-        "streamMs": 0.06,
+        "streamMs": 0.02,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -125,7 +125,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 88.1
+          "ms": 81.9
         },
         "mapMs": 0,
         "cameraClearance": 155.9
@@ -229,7 +229,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 238,
+          "ms": 206,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -248,7 +248,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 177,
+          "ms": 185,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -267,7 +267,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 177,
+          "ms": 185,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -288,7 +288,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 177,
+          "ms": 185,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -307,7 +307,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 177,
+          "ms": 185,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -326,7 +326,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 102,
+          "ms": 202,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -397,17 +397,17 @@
           "visible": true
         },
         "toAircraft": 5,
-        "rotor": 0.564,
+        "rotor": 0.796,
         "teaching": "yard",
         "teachingDone": false,
         "mapOpened": false,
-        "tint": "#fffaed",
-        "tintAmount": 0.15,
+        "tint": "#fffdf7",
+        "tintAmount": 0.069,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
-        "fps": 94,
-        "streamMs": 0,
+        "fps": 60,
+        "streamMs": 0.04,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -427,7 +427,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 80.5
+          "ms": 122.8
         },
         "mapMs": 0,
         "cameraClearance": 155.9
@@ -483,10 +483,10 @@
         "vh": 390
       },
       "coveredPercent": 22,
-      "travelled": 8.7,
+      "travelled": 9,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 10.01
+        "cablePaid": 9.65
       },
       "aimStick": {
         "up": 1,
@@ -531,7 +531,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 208,
+          "ms": 311,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -550,7 +550,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 159,
+          "ms": 309,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -569,7 +569,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 159,
+          "ms": 309,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -590,7 +590,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 159,
+          "ms": 309,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -609,7 +609,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 159,
+          "ms": 309,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -628,7 +628,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 98,
+          "ms": 193,
           "size": 709,
           "redraws": 3,
           "settled": false

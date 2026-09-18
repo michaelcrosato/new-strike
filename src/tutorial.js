@@ -91,7 +91,7 @@ export const TUTORIAL = [
   {
     id: 'spend',
     // The fee is the whole point of the trade, so the last thing taught is where it goes.
-    say: () => 'Press B for the yard, where the fee buys fittings for her and people to work them.',
+    say: () => 'Press B for the yard, where the fee becomes better fittings for her and better people.',
     hint: 'press B',
     minSeconds: 1,
     done: s => s.yardOpened,

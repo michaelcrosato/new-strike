@@ -118,7 +118,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 84.9
+        "ms": 84.7
       },
       "mapMs": 0,
       "cameraClearance": 155.9
@@ -169,7 +169,7 @@
     },
     "look": {
       "lum": 0.559,
-      "sat": 0.56,
+      "sat": 0.561,
       "max": 0.808,
       "spread": 3.5,
       "clipped": 0.01,
@@ -293,7 +293,7 @@
         },
         "d": {
           "travel": {
-            "x": 0.778,
+            "x": 0.779,
             "z": -0.628
           },
           "nose": {
@@ -303,13 +303,13 @@
           "aiming": false
         }
       },
-      "behind": -0.99837,
+      "behind": -0.997594,
       "across": 0.002811999999999981,
       "rounds": {
         "count": 1,
         "dir": {
-          "x": -0.15851696681291966,
-          "z": 0.9873562534528414
+          "x": -0.12941286162479576,
+          "z": 0.9915907982863101
         },
         "nose": {
           "x": -0.139,
@@ -323,7 +323,7 @@
     },
     "onFoot": {
       "skidHeight": 1.7,
-      "rotorParked": 0.11,
+      "rotorParked": 0.111,
       "stepOut": 5,
       "walkKmh": 7,
       "runKmh": 20,
@@ -502,7 +502,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 84.9
+        "ms": 84.7
       }
     },
     "pokeThrough": {
@@ -512,7 +512,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 132,
+      "ms": 133,
       "sameTwice": true
     },
     "mapNavigation": {
@@ -530,7 +530,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 132,
+        "ms": 133,
         "size": 620,
         "redraws": 1,
         "settled": true
@@ -549,7 +549,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 147,
+        "ms": 128,
         "size": 620,
         "redraws": 2,
         "settled": true
@@ -568,7 +568,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 109,
+        "ms": 108,
         "size": 620,
         "redraws": 3,
         "settled": true
@@ -587,7 +587,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 147,
+        "ms": 170,
         "size": 620,
         "redraws": 4,
         "settled": true
@@ -606,7 +606,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 149,
+        "ms": 140,
         "size": 620,
         "redraws": 5,
         "settled": true
@@ -625,7 +625,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 119,
+        "ms": 118,
         "size": 620,
         "redraws": 6,
         "settled": true
@@ -646,7 +646,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.413747502848987
+      "paidOut": 2.1439150599899355
     },
     "job": {
       "cash": 5000,
@@ -679,7 +679,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0,
+      "worst": 0.04,
       "resident": 35,
       "nodes": 7255
     }

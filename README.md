@@ -44,7 +44,7 @@ scraped circle of dirt, some drums and a tarpaulin — and gives you one sentenc
 fly for money, that machine is everything you own, `SPACE` is the collective, `M` is the map.
 A delivery is already in your hands by the time the map is explained, because the first job is
 assigned rather than left on the board: fly to the ring, hold `E`, come home, then `B` for the
-yard to put the fee into the machine and the crew. Eleven steps, about a minute, and `ESC` or
+yard, where the fee becomes better fittings and better people. Eleven steps, about a minute, and `ESC` or
 SKIP abandons it. Quill's briefing on the region is still there as a
 reference panel, on `/` or THE BRIEF in the yard.
 

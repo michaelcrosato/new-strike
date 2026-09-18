@@ -560,14 +560,14 @@ something the player has to actually do:
 | `map` | `M` for the region, the ring is the drop — open it |
 | `drop` | hold `E` over the ring to set the crate down |
 | `home` | your own pad is the only place that refuels you — go back |
-| `spend` | `B` for the yard, where the fee buys fittings and crew — open it |
+| `spend` | `B` for the yard, where the fee becomes fittings and people — open it |
 | `done` | take another and keep going until you own something |
 
 A step holds its sentence for its own minimum however fast the player is, so the script cannot
 flicker past in the first two seconds; it then waits for its own condition and nothing else,
 so thirty seconds of walking never teaches you to fly. The dwell times add up to **22.5
-seconds** of reading, and a browser play-through of the whole thing took **37 seconds**. `ESC` or SKIP
-abandons it for good.
+seconds** of reading, and a browser play-through of the whole thing took **37 seconds**.
+`ESC` or SKIP abandons it for good.
 
 The job in step `job` is not put on the board to be found: `openingContract` in `src/agency.js`
 picks the nearest settlement more than 45 units from the yard, builds a full delivery contract
