@@ -676,7 +676,7 @@ which was long enough for the browser to throw away the next tap.
 
 ## The pause menu
 
-`ESC`, or MENU on the rail. There was no pause at all before this: opening a panel held the
+`ESC` or `P`, or MENU on the rail. There was no pause at all before this: opening a panel held the
 aircraft on station while fuel burned, a deadline ran down and a garrison kept shooting. This
 one stops the world — no flight, no combat, no missions, no fuel, and no clock, so the water
 stops moving too — and keeps drawing the frame behind it, because the world is half the

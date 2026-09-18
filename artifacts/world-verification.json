@@ -101,7 +101,7 @@
       "sun": 3.75,
       "hemi": 1.78,
       "fps": 60,
-      "streamMs": 0.04,
+      "streamMs": 0,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -121,7 +121,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 78.2
+        "ms": 120.9
       },
       "mapMs": 0,
       "cameraClearance": 155.9
@@ -212,7 +212,7 @@
       }
     },
     "pause": {
-      "documented": 34,
+      "documented": 35,
       "held": {
         "moved": 0,
         "burned": 0,
@@ -322,7 +322,7 @@
     "flight": {
       "cruiseKmh": 261,
       "dashKmh": 313,
-      "travelled": 58.7
+      "travelled": 58.6
     },
     "dualStick": {
       "headings": {
@@ -350,7 +350,7 @@
         },
         "a": {
           "travel": {
-            "x": -0.741,
+            "x": -0.742,
             "z": 0.671
           },
           "nose": {
@@ -361,7 +361,7 @@
         },
         "d": {
           "travel": {
-            "x": 0.779,
+            "x": 0.778,
             "z": -0.628
           },
           "nose": {
@@ -371,13 +371,13 @@
           "aiming": false
         }
       },
-      "behind": -0.99837,
+      "behind": -0.997594,
       "across": 0.002811999999999981,
       "rounds": {
         "count": 1,
         "dir": {
-          "x": -0.12198995897926371,
-          "z": 0.9925313344717323
+          "x": -0.12103818699731553,
+          "z": 0.9926478516011622
         },
         "nose": {
           "x": -0.139,
@@ -401,11 +401,11 @@
     },
     "onFoot": {
       "skidHeight": 1.7,
-      "rotorParked": 0.111,
+      "rotorParked": 0.11,
       "stepOut": 5,
       "walkKmh": 40,
       "runKmh": 110,
-      "refusedAt": 12.2,
+      "refusedAt": 12.1,
       "refusals": {
         "water": {
           "ok": false,
@@ -580,7 +580,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 78.2
+        "ms": 120.9
       }
     },
     "pokeThrough": {
@@ -590,7 +590,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 120,
+      "ms": 154,
       "sameTwice": true
     },
     "mapNavigation": {
@@ -608,7 +608,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 120,
+        "ms": 154,
         "size": 620,
         "redraws": 1,
         "settled": true
@@ -627,7 +627,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 114,
+        "ms": 116,
         "size": 620,
         "redraws": 2,
         "settled": true
@@ -665,7 +665,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 128,
+        "ms": 126,
         "size": 620,
         "redraws": 4,
         "settled": true
@@ -684,7 +684,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 113,
+        "ms": 108,
         "size": 620,
         "redraws": 5,
         "settled": true
@@ -724,7 +724,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.3594796223739576
+      "paidOut": 2.3594796223739563
     },
     "job": {
       "cash": 5000,
