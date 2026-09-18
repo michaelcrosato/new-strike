@@ -1057,7 +1057,10 @@ function updateMarker() {
     heli.marker.scale.setScalar(radius);
     heli.marker.position.y = world.groundHeight(craft.x, craft.z) - craft.y + 0.6;
   }
-  figure.marker.visible = stance === 'afoot' && zoom > 1.35;
+  // And the pilot keeps theirs whenever they are out, at any zoom: the first thing the
+  // opening asks a player to do is walk, which means finding themselves first. This used to
+  // wait for 1.35x, so at the default view the figure was a dozen pixels with nothing on it.
+  figure.marker.visible = stance === 'afoot';
   if (figure.marker.visible) {
     figure.marker.scale.setScalar(radius);
     figure.marker.position.y = 0.4;

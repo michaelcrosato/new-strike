@@ -197,6 +197,11 @@ a wall of it. And a ring appears on the ground under the aircraft, sized to stay
 on screen, because at eight times out the machine itself is two pixels of dark green on a
 hillside — a marker rather than a bigger helicopter, so the aircraft stays the size it is.
 
+Out of the aircraft both of you get a ring at any zoom: amber where you left the machine, and
+blue on the pilot. The pilot's used to wait for 1.35x like everything else, which meant that
+at the default view the first thing the opening asks you to do — walk — began by finding a
+figure a dozen pixels tall in a yard.
+
 ## The region map
 
 The only place you see all hundred square kilometres at once, so it has to read as terrain
