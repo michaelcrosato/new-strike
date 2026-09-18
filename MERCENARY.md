@@ -546,7 +546,7 @@ home site is flat but not level and nothing here flattens the terrain.
 ## The first minute — `src/tutorial.js`
 
 The opening used to be a briefing card with a button, which is homework rather than an
-introduction. It is now **ten steps, one sentence each**, and each sentence is attached to
+introduction. It is now **eleven steps, one sentence each**, and each sentence is attached to
 something the player has to actually do:
 
 | Step | What it says, and what clears it |
@@ -560,11 +560,12 @@ something the player has to actually do:
 | `map` | `M` for the region, the ring is the drop — open it |
 | `drop` | hold `E` over the ring to set the crate down |
 | `home` | your own pad is the only place that refuels you — go back |
-| `done` | take another, spend the fee, keep going |
+| `spend` | `B` for the yard, where the fee buys fittings and crew — open it |
+| `done` | take another and keep going until you own something |
 
 A step holds its sentence for its own minimum however fast the player is, so the script cannot
 flicker past in the first two seconds; it then waits for its own condition and nothing else,
-so thirty seconds of walking never teaches you to fly. The dwell times add up to **21.5
+so thirty seconds of walking never teaches you to fly. The dwell times add up to **22.5
 seconds** of reading, and a browser play-through of the whole thing took **37 seconds**. `ESC` or SKIP
 abandons it for good.
 
@@ -595,7 +596,7 @@ Wired: the region and its nine distinct areas, the nine landmarks, the streamer,
 meshing with blended biomes, flight, the region map with region names and landmark markers,
 combat with streamed garrisons, standing-driven hostility, all twelve contract kinds with
 their failure states, four complications, the contract board, payment, the day rolling over,
-the yard with upgrades and hiring, saving, the yard you stand in and the ten-step opening
+the yard with upgrades and hiring, saving, the yard you stand in and the eleven-step opening
 that teaches it, the briefing as a reference panel, sound, the winch, and the telemetry that
 shows all of it.
 
@@ -666,9 +667,10 @@ which was long enough for the browser to throw away the next tap.
   minute that does not turn into five.
 - **33 browser checks** (`npm run verify:world`) against the built single file served at the
   site root: it boots and renders on both backends to the same picture, a first run starts on
-  foot in a yard that exists and is taught one sentence at a time, the opening plays in order
-  and hands the pilot a delivery without a trip to the board, the briefing opens on demand and
-  still describes the generated region, the teaching can be abandoned, the frame keeps the original's upbeat range and each area carries its
+  foot in a yard that exists and is taught one sentence at a time with the sentence clear of
+  every panel at three window sizes, the whole opening plays through in order from the yard to
+  a settled delivery that pays, the briefing opens on demand and still describes the generated
+  region, a second seed opens the same way in its own region and the teaching can be abandoned, the frame keeps the original's upbeat range and each area carries its
   own tone, real keyboard input flies the aircraft at a gunship's cruise and top speed, the dual-stick
   controls fly and aim independently and the gun follows the nose, the aircraft lands on its
   skids and the pilot gets out and walks, the camera stays above the ground everywhere including the highest
@@ -678,7 +680,7 @@ which was long enough for the browser to throw away the next tap.
   streamed terrain, the map draws inside a frame budget and repaints without accumulating
   markers, the map and yard open on real keys, all twelve kinds reach the board, a real key
   press pays the winch cable out, a contract can be flown for money, progress saves and
-  survives a reload, weather closes in and lifts, a ten-kilometre transit stays bounded, the
+  survives a reload with the opening happening once per seed, weather closes in and lifts, a ten-kilometre transit stays bounded, the
   map pans and zooms through its five steps under a real wheel and a real mouse drag and
   redraws the terrain at each scale, and there are no external requests or script errors.
 - **39 mobile checks** (`npm run verify:mobile`), the same built file at 390×844 and 844×390

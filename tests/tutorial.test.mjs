@@ -12,7 +12,7 @@ import {
 
 const START = {
   stance: 'afoot', walked: 0, airborne: 0, flown: 0,
-  mapOpened: false, cargoDown: false, jobDone: false,
+  mapOpened: false, yardOpened: false, cargoDown: false, jobDone: false,
 };
 
 // Plays the script the way a competent player would: whatever the current step is waiting
@@ -38,6 +38,7 @@ function play({ dt = 1 / 30, limit = 600 } = {}) {
     if (step.id === 'map') snapshot.mapOpened = true;
     if (step.id === 'drop') snapshot.cargoDown = true;
     if (step.id === 'home') snapshot.jobDone = true;
+    if (step.id === 'spend') snapshot.yardOpened = true;
   }
   assert.fail('the tutorial never finished');
 }
@@ -60,7 +61,7 @@ test('every step is one sentence, with something to do and a name', () => {
 
 test('it teaches in an order that makes sense', () => {
   const order = TUTORIAL.map(s => s.id);
-  assert.deepEqual(order, ['yard', 'trade', 'board', 'lift', 'fly', 'job', 'map', 'drop', 'home', 'done']);
+  assert.deepEqual(order, ['yard', 'trade', 'board', 'lift', 'fly', 'job', 'map', 'drop', 'home', 'spend', 'done']);
   const before = (a, b) => order.indexOf(a) < order.indexOf(b);
   // You cannot be taught to lift off before you have been told to get in.
   assert.ok(before('board', 'lift'), 'board before lift');
@@ -68,6 +69,8 @@ test('it teaches in an order that makes sense', () => {
   assert.ok(before('fly', 'drop'), 'fly before the drop');
   assert.ok(before('job', 'map'), 'the job is in hand before the map is explained');
   assert.ok(before('drop', 'home'), 'drop before coming home');
+  // And you are not told where the money goes until you have some.
+  assert.ok(before('home', 'spend'), 'the fee is earned before it is spent');
   // And the very first thing is the only thing you can do on foot with nothing explained.
   assert.equal(order[0], 'yard');
 });
@@ -88,7 +91,7 @@ test('a sentence cannot be skipped past by doing the thing instantly', () => {
   const state = createTutorial();
   // Everything already satisfied, from the first frame.
   const done = { stance: 'flying', walked: 999, airborne: 99, flown: 999,
-    mapOpened: true, cargoDown: true, jobDone: true };
+    mapOpened: true, yardOpened: true, cargoDown: true, jobDone: true };
   stepTutorial(state, done, 1 / 30);          // enters the first step
   assert.equal(tutorialStep(state).id, 'yard');
   stepTutorial(state, done, 1 / 30);

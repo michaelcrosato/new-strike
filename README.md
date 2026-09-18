@@ -43,8 +43,9 @@ view · `Q` get out or climb back in · `B` the yard · `M` the region map · `H
 scraped circle of dirt, some drums and a tarpaulin — and gives you one sentence at a time: you
 fly for money, that machine is everything you own, `SPACE` is the collective, `M` is the map.
 A delivery is already in your hands by the time the map is explained, because the first job is
-assigned rather than left on the board: fly to the ring, hold `E`, come home. Ten steps, about
-a minute, and `ESC` or SKIP abandons it. Quill's briefing on the region is still there as a
+assigned rather than left on the board: fly to the ring, hold `E`, come home, then `B` for the
+yard to put the fee into the machine and the crew. Eleven steps, about a minute, and `ESC` or
+SKIP abandons it. Quill's briefing on the region is still there as a
 reference panel, on `/` or THE BRIEF in the yard.
 
 Movement is screen-relative and independent of where the nose is, so the aircraft crabs and

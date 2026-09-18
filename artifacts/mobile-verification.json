@@ -95,17 +95,17 @@
           "visible": true
         },
         "toAircraft": 5,
-        "rotor": 0.568,
+        "rotor": 0.576,
         "teaching": "yard",
         "teachingDone": false,
         "mapOpened": false,
         "tint": "#fffaee",
-        "tintAmount": 0.148,
+        "tintAmount": 0.145,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
         "fps": 94,
-        "streamMs": 0.02,
+        "streamMs": 0.06,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -125,7 +125,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 77.5
+          "ms": 88.1
         },
         "mapMs": 0,
         "cameraClearance": 155.9
@@ -184,7 +184,7 @@
       "travelled": 8.8,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 9.27
+        "cablePaid": 10.01
       },
       "aimStick": {
         "up": 1,
@@ -229,7 +229,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 170,
+          "ms": 238,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -248,7 +248,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 163,
+          "ms": 177,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -267,7 +267,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 163,
+          "ms": 177,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -288,7 +288,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 163,
+          "ms": 177,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -307,7 +307,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 163,
+          "ms": 177,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -326,7 +326,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 98,
+          "ms": 102,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -397,17 +397,17 @@
           "visible": true
         },
         "toAircraft": 5,
-        "rotor": 0.581,
+        "rotor": 0.564,
         "teaching": "yard",
         "teachingDone": false,
         "mapOpened": false,
-        "tint": "#fffaee",
-        "tintAmount": 0.144,
+        "tint": "#fffaed",
+        "tintAmount": 0.15,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
-        "fps": 110,
-        "streamMs": 0.05,
+        "fps": 94,
+        "streamMs": 0,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -427,7 +427,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 80.8
+          "ms": 80.5
         },
         "mapMs": 0,
         "cameraClearance": 155.9
@@ -486,7 +486,7 @@
       "travelled": 8.7,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 10.02
+        "cablePaid": 10.01
       },
       "aimStick": {
         "up": 1,
@@ -531,7 +531,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 182,
+          "ms": 208,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -550,7 +550,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 156,
+          "ms": 159,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -569,7 +569,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 156,
+          "ms": 159,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -590,7 +590,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 156,
+          "ms": 159,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -609,7 +609,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 156,
+          "ms": 159,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -628,7 +628,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 159,
+          "ms": 98,
           "size": 709,
           "redraws": 3,
           "settled": false

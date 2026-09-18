@@ -96,7 +96,7 @@ try {
     for (let i = 0; i < seconds * 2; i++) {
       await page.evaluate(held => window.merc.simulate(0.5, held), input);
       const at = await page.evaluate(() => window.merc.teachStep());
-      if (at !== taught.at(-1)) taught.push(at);
+      if (at && at !== taught.at(-1)) taught.push(at);
     }
     return taught.at(-1);
   };
@@ -109,14 +109,41 @@ try {
   await advance(5, { Space: true });                        // the collective
   await advance(6, { KeyW: true, ShiftLeft: true });        // out over the region
   await advance(4, {});                                     // the job, put in hand on arrival
-  assert.deepEqual(taught, ['yard', 'trade', 'board', 'lift', 'fly', 'job', 'map'],
-    `the opening is taught in order: ${taught.join(' -> ')}`);
   const handed = await outfit();
   assert.ok(handed.active, 'the opening job is put in hand rather than left on the board');
   assert.match(handed.active.title, /^Run cargo to /, `and it is a pick-up and drop-off: ${handed.active.title}`);
+
+  // The last four steps are bridges to the rest of the game rather than to the flight model:
+  // the map panel, the crate going down, the contract settling, and the yard. Each of them is
+  // one line in the harness, and each is the kind of wiring that breaks quietly.
+  await page.keyboard.press('m');
+  await advance(2, {});
+  await page.keyboard.press('m');                           // and back out, or nothing flies
+  await page.evaluate(() => { const z = window.merc.mission().zone; window.merc.teleport(z.x, z.z); });
+  await advance(1, { Space: true });
+  // One uninterrupted call, because the crate needs two and a half seconds of held E and the
+  // real frames that run between two evaluate() calls see no key held and reset the hold.
+  await page.evaluate(() => window.merc.simulate(9, { KeyE: true }));
+  await advance(1, {});                                      // set down from a hover
+  await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+  await advance(5, {});
+  await page.keyboard.press('b');
+  await advance(2, {});
+  await page.keyboard.press('b');
+  await advance(6, {});
+  assert.deepEqual(taught,
+    ['yard', 'trade', 'board', 'lift', 'fly', 'job', 'map', 'drop', 'home', 'spend', 'done'],
+    `the opening is taught in order: ${taught.join(' -> ')}`);
+  assert.equal(await page.evaluate(() => window.merc.state().teachingDone), true,
+    'and the script finishes rather than stopping somewhere in the middle');
+  assert.equal(await page.locator('#teach').isVisible(), false, 'taking its panel down with it');
+  const paid = await outfit();
+  assert.ok(paid.cash > handed.cash, `the first job pays: ${handed.cash} -> ${paid.cash}`);
+  assert.equal(paid.active, null, 'and there is nothing left in hand');
   evidence.measurements.opening.taught = taught;
   evidence.measurements.opening.job = handed.active.title;
-  record('The opening is taught in order and hands the pilot a delivery without a trip to the board');
+  evidence.measurements.opening.paid = { before: handed.cash, after: paid.cash };
+  record('The whole opening plays through in order, from the yard to a settled delivery');
 
   // ---------------------------------------------------------------- the briefing
   // Still there, and still about the world that was generated, but a reference panel opened
@@ -134,11 +161,26 @@ try {
   assert.equal(await page.locator('#intro').isVisible(), false, 'and it dismisses');
   record('The briefing is a reference panel that still describes the region actually generated');
 
-  // Abandoned for the rest of the suite, which flies rather than learns.
-  assert.equal(await page.evaluate(() => window.merc.skipTeaching()), true, 'the teaching can be abandoned');
-  assert.equal(await page.evaluate(() => window.merc.teachStep()), null, 'and stops asking for anything');
-  assert.equal(await page.locator('#teach').isVisible(), false, 'and takes its panel with it');
-  record('The teaching can be abandoned by a player who would rather work it out themselves');
+  // Abandoning it, on a second seed - which is also the cheapest proof that a different
+  // generated region boots into the same opening rather than only this one doing so.
+  const second = await context.newPage();
+  second.on('pageerror', e => evidence.errors.push('second seed: ' + e.message));
+  second.on('console', m => { if (m.type() === 'error') evidence.errors.push('second seed: ' + m.text()); });
+  await second.goto(url(777));
+  await second.waitForFunction(() => window.merc && window.merc.state().resident > 20, null, { timeout: 30000 });
+  const elsewhere = await second.evaluate(() => window.merc.state());
+  assert.equal(elsewhere.stance, 'afoot', 'another seed starts on foot in its own yard');
+  assert.equal(elsewhere.teaching, 'yard', 'and is taught from the first step');
+  const elsewhereSaid = await second.locator('#teach-say').textContent();
+  const elsewhereRegion = await second.evaluate(() => window.merc.world.regionAt(window.merc.world.home.x, window.merc.world.home.z).name);
+  assert.ok(elsewhereSaid.includes(elsewhereRegion), `naming its own region: ${elsewhereRegion} - "${elsewhereSaid}"`);
+  assert.equal(await second.evaluate(() => window.merc.skipTeaching()), true, 'the teaching can be abandoned');
+  assert.equal(await second.evaluate(() => window.merc.teachStep()), null, 'and stops asking for anything');
+  assert.equal(await second.locator('#teach').isVisible(), false, 'and takes its panel with it');
+  assert.equal(await second.evaluate(() => window.merc.skipTeaching()), false, 'and stays abandoned');
+  evidence.measurements.opening.secondSeed = { region: elsewhereRegion, sentence: elsewhereSaid };
+  await second.close();
+  record('Another seed opens the same way in its own region, and the teaching can be abandoned');
 
   // ---------------------------------------------------------------- the backends
   // One renderer, two backends: WebGPU where the browser has it, WebGL 2 where it does not.
@@ -762,6 +804,7 @@ try {
     merc.profileRef.active = null;
     merc.profileRef.cash = 5000;
     const cash = merc.profileRef.cash, day = merc.profileRef.day;
+    const before = merc.profileRef.completed.length;
     merc.offer('salvage');
     const zone = merc.mission().zone;
     merc.teleport(zone.x, zone.z);
@@ -770,12 +813,12 @@ try {
     merc.teleport(merc.world.home.x, merc.world.home.z);
     merc.simulate(3, {});
     const done = merc.outfit();
-    return { cash, day, midway, after: done.cash, dayAfter: done.day, completed: done.completed, active: done.active };
+    return { cash, day, before, midway, after: done.cash, dayAfter: done.day, completed: done.completed, active: done.active };
   });
   assert.match(job.midway, /RETURN TO THE YARD/, 'the wreck comes aboard');
   assert.ok(job.after > job.cash, `and it pays: ${job.cash} -> ${job.after}`);
   assert.equal(job.dayAfter, job.day + 1, 'the day rolls over');
-  assert.equal(job.completed, 1, 'and the job is on the books');
+  assert.equal(job.completed, job.before + 1, 'and the job is on the books');
   assert.equal(job.active, null, 'with nothing left in hand');
   evidence.measurements.job = job;
   record('A contract can be flown to completion for money on the built bundle');
@@ -786,12 +829,18 @@ try {
     return JSON.parse(localStorage.getItem('merc.profile.' + window.merc.state().seed));
   });
   assert.ok(saved.completed.length >= 1, 'progress is written to storage');
+  const onTheBooks = (await outfit()).completed;
   await page.reload();
   await page.waitForFunction(() => window.merc && window.merc.state().resident > 20, null, { timeout: 30000 });
   assert.equal(await page.locator('#intro').isVisible(), false, 'a returning pilot is not briefed again');
+  // Nor taught again: the opening happens once per seed, in the aircraft rather than beside it.
+  const back = await state();
+  assert.equal(back.teaching, null, 'and is not taught the opening again');
+  assert.equal(await page.locator('#teach').isVisible(), false, 'with no sentence on screen');
+  assert.equal(back.stance, 'flying', 'and starts in the air rather than on foot');
   const reloaded = await outfit();
-  assert.equal(reloaded.completed, 1, 'and the books survive a reload');
-  record('Progress saves per seed, survives a reload, and the briefing only happens once');
+  assert.equal(reloaded.completed, onTheBooks, `and the books survive a reload: ${onTheBooks}`);
+  record('Progress saves per seed, survives a reload, and the opening only happens once');
 
   // ---------------------------------------------------------------- weather
   const weather = await page.evaluate(() => {

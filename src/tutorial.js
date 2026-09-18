@@ -16,6 +16,7 @@
  *   airborne      units of clearance above the ground
  *   flown         units from the yard
  *   mapOpened     whether the region map has been opened at least once
+ *   yardOpened    whether the yard screen has been opened at least once
  *   cargoDown     whether the crate has been set down
  *   jobDone       whether the contract has been settled
  */
@@ -88,8 +89,16 @@ export const TUTORIAL = [
     done: s => s.jobDone,
   },
   {
+    id: 'spend',
+    // The fee is the whole point of the trade, so the last thing taught is where it goes.
+    say: () => 'Press B for the yard, where the fee buys fittings for her and people to work them.',
+    hint: 'press B',
+    minSeconds: 1,
+    done: s => s.yardOpened,
+  },
+  {
     id: 'done',
-    say: () => 'That is the whole job: take another, spend the fee on the machine, and keep going.',
+    say: () => 'That is the whole job, so take another one and keep going until you own something.',
     hint: 'you are on your own',
     minSeconds: 4,
     done: (s, elapsed) => elapsed > 4,

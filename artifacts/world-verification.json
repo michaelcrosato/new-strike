@@ -2,9 +2,9 @@
   "checks": [
     "The built bundle boots, streams the first chunks and renders",
     "A first run starts on foot in a yard that exists, and is taught one sentence at a time",
-    "The opening is taught in order and hands the pilot a delivery without a trip to the board",
+    "The whole opening plays through in order, from the yard to a settled delivery",
     "The briefing is a reference panel that still describes the region actually generated",
-    "The teaching can be abandoned by a player who would rather work it out themselves",
+    "Another seed opens the same way in its own region, and the teaching can be abandoned",
     "Renders on WebGPU and on the WebGL 2 fallback, to the same picture",
     "The frame keeps the original upbeat range, and each area carries its own tone",
     "Real keyboard input flies the aircraft at a modern gunship cruise and top speed",
@@ -29,7 +29,7 @@
     "All twelve kinds of work reach the board and brief the pilot",
     "Holding the winch key lowers a visible cable and hook, and releasing raises it",
     "A contract can be flown to completion for money on the built bundle",
-    "Progress saves per seed, survives a reload, and the briefing only happens once",
+    "Progress saves per seed, survives a reload, and the opening only happens once",
     "The weather complication closes the visibility in and lifts again",
     "Flying the full ten kilometres keeps residency bounded and releases what it builds",
     "No external asset requests and no JavaScript or shader errors"
@@ -118,7 +118,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 85.2
+        "ms": 84.9
       },
       "mapMs": 0,
       "cameraClearance": 155.9
@@ -135,9 +135,21 @@
         "lift",
         "fly",
         "job",
-        "map"
+        "map",
+        "drop",
+        "home",
+        "spend",
+        "done"
       ],
-      "job": "Run cargo to BRINE STATION"
+      "job": "Run cargo to BRINE STATION",
+      "paid": {
+        "before": 4800,
+        "after": 6130
+      },
+      "secondSeed": {
+        "region": "THE LONG SAVANNA",
+        "sentence": "This is the yard: two tents and a scrape of dirt in THE LONG SAVANNA, because nobody else wanted it."
+      }
     },
     "backends": {
       "primary": "WebGPU",
@@ -157,7 +169,7 @@
     },
     "look": {
       "lum": 0.559,
-      "sat": 0.561,
+      "sat": 0.56,
       "max": 0.808,
       "spread": 3.5,
       "clipped": 0.01,
@@ -242,7 +254,7 @@
     "flight": {
       "cruiseKmh": 261,
       "dashKmh": 313,
-      "travelled": 58.6
+      "travelled": 58.7
     },
     "dualStick": {
       "headings": {
@@ -281,7 +293,7 @@
         },
         "d": {
           "travel": {
-            "x": 0.779,
+            "x": 0.778,
             "z": -0.628
           },
           "nose": {
@@ -291,13 +303,13 @@
           "aiming": false
         }
       },
-      "behind": -0.997594,
+      "behind": -0.99837,
       "across": 0.002811999999999981,
       "rounds": {
         "count": 1,
         "dir": {
-          "x": -0.13363190237670747,
-          "z": 0.991031036177567
+          "x": -0.15851696681291966,
+          "z": 0.9873562534528414
         },
         "nose": {
           "x": -0.139,
@@ -418,7 +430,7 @@
           "step": 0,
           "zoom": 0.7,
           "across": 116,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00105,
           "overview": false,
           "clearance": 144.4
@@ -427,7 +439,7 @@
           "step": 1,
           "zoom": 1,
           "across": 166,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00097,
           "overview": false,
           "clearance": 168
@@ -436,7 +448,7 @@
           "step": 2,
           "zoom": 1.41,
           "across": 235,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00082,
           "overview": true,
           "clearance": 231.1
@@ -445,7 +457,7 @@
           "step": 3,
           "zoom": 2,
           "across": 333,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00066,
           "overview": true,
           "clearance": 302.4
@@ -454,7 +466,7 @@
           "step": 4,
           "zoom": 2.83,
           "across": 471,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00052,
           "overview": true,
           "clearance": 401.3
@@ -463,7 +475,7 @@
           "step": 5,
           "zoom": 4,
           "across": 666,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00039,
           "overview": true,
           "clearance": 542.5
@@ -472,7 +484,7 @@
           "step": 6,
           "zoom": 5.66,
           "across": 942,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00029,
           "overview": true,
           "clearance": 742.9
@@ -481,7 +493,7 @@
           "step": 7,
           "zoom": 8,
           "across": 1331,
-          "draw": 79,
+          "draw": 83,
           "fog": 0.00022,
           "overview": true,
           "clearance": 1025.3
@@ -490,7 +502,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 85.2
+        "ms": 84.9
       }
     },
     "pokeThrough": {
@@ -500,7 +512,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 172,
+      "ms": 132,
       "sameTwice": true
     },
     "mapNavigation": {
@@ -518,7 +530,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 172,
+        "ms": 132,
         "size": 620,
         "redraws": 1,
         "settled": true
@@ -537,7 +549,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 174,
+        "ms": 147,
         "size": 620,
         "redraws": 2,
         "settled": true
@@ -556,7 +568,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 141,
+        "ms": 109,
         "size": 620,
         "redraws": 3,
         "settled": true
@@ -575,7 +587,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 171,
+        "ms": 147,
         "size": 620,
         "redraws": 4,
         "settled": true
@@ -594,7 +606,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 141,
+        "ms": 149,
         "size": 620,
         "redraws": 5,
         "settled": true
@@ -613,7 +625,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 133,
+        "ms": 119,
         "size": 620,
         "redraws": 6,
         "settled": true
@@ -634,15 +646,16 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.4176144848976118
+      "paidOut": 2.413747502848987
     },
     "job": {
       "cash": 5000,
-      "day": 1,
+      "day": 2,
+      "before": 1,
       "midway": "WRECK ABOARD · RETURN TO THE YARD",
-      "after": 9860,
-      "dayAfter": 2,
-      "completed": 1,
+      "after": 8860,
+      "dayAfter": 3,
+      "completed": 2,
       "active": null
     },
     "weather": {
@@ -666,7 +679,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0.02,
+      "worst": 0,
       "resident": 35,
       "nodes": 7255
     }

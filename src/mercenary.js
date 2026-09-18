@@ -314,7 +314,7 @@ function renderYard() {
 function toggleYard() {
   const panel = $('yard');
   panel.hidden = !panel.hidden;
-  if (!panel.hidden) renderYard();
+  if (!panel.hidden) { yardOpened = true; renderYard(); }
 }
 onTap($('yard-close'), toggleYard);
 
@@ -823,7 +823,7 @@ const toggleStance = () => (stance === 'afoot' ? climbIn() : climbOut());
 // ---------------------------------------------------------------- the first minute
 // One sentence at a time, each attached to something the player has to do. The script
 // itself lives in src/tutorial.js; this is the part that knows about the world.
-let teaching = null, mapOpened = false, cargoLatched = false;
+let teaching = null, mapOpened = false, yardOpened = false, cargoLatched = false;
 
 function tutorialSnapshot() {
   return {
@@ -832,6 +832,7 @@ function tutorialSnapshot() {
     airborne: craft.y - world.groundHeight(craft.x, craft.z),
     flown: Math.hypot(craft.x - home.x, craft.z - home.z),
     mapOpened,
+    yardOpened,
     cargoDown: cargoLatched,
     jobDone: profile.completed.length > 0,
   };
