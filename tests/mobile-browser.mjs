@@ -149,8 +149,19 @@ try {
       `${label}: the sentence being taught is on screen without scrolling: ${JSON.stringify(teachFits.box)}`);
     assert.deepEqual(teachFits.clash, [],
       `${label}: and no control a thumb uses is on top of it: ${JSON.stringify(teachFits.clash)}`);
+    // A phone has no keys, so the prompt names the control a thumb actually has.
+    const prompt = await page.evaluate(() => ({
+      shown: !document.getElementById('teach-press').hidden,
+      key: document.getElementById('teach-key').textContent,
+      verb: document.getElementById('teach-verb').textContent,
+      size: Math.round(parseFloat(getComputedStyle(document.getElementById('teach-key')).fontSize)),
+    }));
+    assert.equal(prompt.shown, true, `${label}: the opening shows what to do, not just what to read`);
+    assert.equal(prompt.key, 'STICK', `${label}: and names the thumb control rather than a key: ${prompt.key}`);
+    assert.ok(prompt.size >= 18, `${label}: at ${prompt.size}px it is readable at arm's length`);
     await page.screenshot({ path: `artifacts/mobile-${label}-opening.png` });
     measurements.teaching = teachFits.box;
+    measurements.prompt = prompt;
     record(`The opening sentence is on screen and clear of the thumb controls (${label})`);
 
     // SKIP is a real button for a thumb, and the rest of this suite flies rather than learns.
@@ -290,7 +301,19 @@ try {
     assert.ok(await page.evaluate(() => window.merc.winchOut() < 0.5),
       `${label}: and lifting the thumb winds it back in`);
     measurements.fire = { peakShots, cablePaid };
-    record(`The fire button shoots and the winch button pays out the cable (${label})`);
+    // Two controls, not one: the climb button and the trigger are different buttons in
+    // different places, which is the whole point of the right thumb being the gun.
+    const separate = await page.evaluate(() => {
+      const box = id => { const r = document.getElementById(id).getBoundingClientRect();
+        return { id, l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom) }; };
+      const climb = box('touch-climb'), trigger = box('touch-fire');
+      const apart = climb.b <= trigger.t || climb.t >= trigger.b || climb.r <= trigger.l || climb.l >= trigger.r;
+      return { climb, trigger, apart };
+    });
+    assert.equal(separate.apart, true,
+      `${label}: climb and fire are separate buttons: ${JSON.stringify(separate)}`);
+    measurements.separateControls = separate;
+    record(`The fire button shoots, the winch pays the cable out, and climbing is its own button (${label})`);
 
     // ---------------------------------------------------------------- the second stick
     // Dual-stick on a phone: the left thumb flies and the right thumb points. The fire
@@ -486,6 +509,45 @@ try {
     assert.equal(await page.locator('#yard').isVisible(), false, `${label}: and closes again`);
     record(`The rail opens the contract board and the yard, both readable and closable (${label})`);
 
+    // ---------------------------------------------------------------- the pause menu
+    // A phone has no ESC, so the rail carries it. The card has to fit the screen and every
+    // button on it has to be reachable with a thumb, because RESUME is the only way out.
+    const menuTap = await centreOf(page, '#rail-menu');
+    await touch.tap(menuTap.x, menuTap.y);
+    await page.waitForTimeout(350);
+    assert.equal(await page.locator('#pause').isVisible(), true, `${label}: the rail opens the menu`);
+    assert.equal((await state()).paused, true, `${label}: and the world is stopped`);
+    const menuFit = await page.evaluate(() => {
+      const card = document.querySelector('.pause-card'), r = card.getBoundingClientRect();
+      const buttons = [...document.querySelectorAll('.pause-actions button, #pause-mute')]
+        .filter(b => !b.hidden)
+        .map(b => { const q = b.getBoundingClientRect(); return { id: b.id, w: Math.round(q.width), h: Math.round(q.height),
+          inView: q.top >= 0 && q.bottom <= innerHeight && q.left >= 0 && q.right <= innerWidth }; });
+      return {
+        inside: r.left >= -1 && r.right <= innerWidth + 1,
+        columns: getComputedStyle(document.querySelector('.pause-grid')).gridTemplateColumns.split(' ').length,
+        thumbs: getComputedStyle(document.querySelector('#pause .for-thumbs')).display,
+        keys: getComputedStyle(document.querySelector('#pause .keylist')).display,
+        buttons, scrollable: card.scrollHeight > card.clientHeight ? true : 'fits',
+      };
+    });
+    assert.ok(menuFit.inside, `${label}: the menu fits the width of the screen`);
+    assert.equal(menuFit.thumbs, 'block', `${label}: and tells a thumb about the thumb controls`);
+    assert.equal(menuFit.keys, 'none', `${label}: rather than about keys it does not have`);
+    if (label === 'portrait') assert.equal(menuFit.columns, 1, 'a single readable column upright');
+    for (const b of menuFit.buttons) {
+      assert.equal(b.inView, true, `${label}: ${b.id} is on screen: ${JSON.stringify(b)}`);
+      assert.ok(b.h >= 28, `${label}: ${b.id} is big enough for a thumb: ${b.h}px`);
+    }
+    await page.screenshot({ path: `artifacts/mobile-${label}-pause.png` });
+    const resume = await centreOf(page, '#pause-resume');
+    await touch.tap(resume.x, resume.y);
+    await page.waitForTimeout(250);
+    assert.equal(await page.locator('#pause').isVisible(), false, `${label}: and a tap resumes`);
+    assert.equal((await state()).paused, false, `${label}: with the world running again`);
+    measurements.pause = menuFit;
+    record(`The rail pauses the world and the menu fits with every button reachable (${label})`);
+
     // ---------------------------------------------------------------- weapons on a tap
     // The starting airframe has one hardpoint and so one weapon. Fit the other two, the way
     // the yard would, then pick the second with a key so the tiles are rebuilt for real.
@@ -543,19 +605,43 @@ try {
     assert.equal(afootTouch.stance, 'afoot', `${label}: a second tap puts the pilot out`);
     assert.equal(afootTouch.pilot.visible, true, `${label}: and draws them`);
 
-    // The flight stick walks the pilot, at a walk rather than at a cruise.
+    // The flight stick walks the pilot. Pushed this far it is between the walk and the run,
+    // both of which are five times a human pace on purpose, and neither of which is flying.
     const joyFoot = await centreOf(page, '#joystick');
     await touch.drag({ x: joyFoot.x, y: joyFoot.y }, { x: joyFoot.x, y: joyFoot.y - 46 }, { steps: 8, hold: 2200 });
     const walkedTouch = await state();
-    assert.ok(walkedTouch.pilot.speedKmh > 4 && walkedTouch.pilot.speedKmh <= 22,
+    assert.ok(walkedTouch.pilot.speedKmh > 25 && walkedTouch.pilot.speedKmh <= 130,
       `${label}: the thumb stick walks the pilot at ${walkedTouch.pilot.speedKmh} km/h`);
     await page.waitForTimeout(300);
 
-    // And back in, from the same button once you are within reach.
-    await page.evaluate(() => window.merc.getIn());
+    // At this pace two seconds of walking is well out of reach of the door, which is what
+    // the range is for: boarding is refused out here.
+    const awayTouch = await state();
+    assert.ok(awayTouch.toAircraft > 8, `${label}: the pilot walks clear of the machine: ${awayTouch.toAircraft} units`);
+    assert.equal(await page.evaluate(() => window.merc.getIn()), false, `${label}: and cannot board from there`);
+    // Back to it with the same thumb, steering toward the parked aircraft rather than
+    // assuming the screen-up direction is exactly opposite the step-out spot.
+    for (let i = 0; i < 10 && (await state()).toAircraft > 6; i++) {
+      const direction = await page.evaluate(() => {
+        const state = window.merc.state(), pilot = state.pilot, craft = state.position;
+        const dx = craft.x - pilot.x, dz = craft.z - pilot.z, length = Math.hypot(dx, dz) || 1;
+        const right = (dx / length) * .772 + (dz / length) * -.635;
+        const up = (dx / length) * -.635 + (dz / length) * -.772;
+        return { x: right, y: -up };
+      });
+      await touch.drag(
+        { x: joyFoot.x, y: joyFoot.y },
+        { x: joyFoot.x + direction.x * 46, y: joyFoot.y + direction.y * 46 },
+        { steps: 6, hold: 450 },
+      );
+    }
+    assert.ok((await state()).toAircraft <= 8, `${label}: the pilot reaches the aircraft again`);
+    assert.equal(await page.evaluate(() => window.merc.getIn()), true, `${label}: and back aboard at the door`);
+    await page.waitForFunction(() => window.merc.state().stance === 'landed');
     const aboardTouch = await state();
     assert.equal(aboardTouch.stance, 'landed', `${label}: and back aboard`);
-    measurements.onFoot = { walkKmh: walkedTouch.pilot.speedKmh, stepOut: afootTouch.toAircraft };
+    measurements.onFoot = { walkKmh: walkedTouch.pilot.speedKmh, stepOut: afootTouch.toAircraft,
+      walkedOut: awayTouch.toAircraft };
     record(`The rail lands the aircraft, puts the pilot out, and the stick walks them (${label})`);
 
     await page.screenshot({ path: `artifacts/mobile-${label}-flight.png` });

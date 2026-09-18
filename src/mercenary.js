@@ -691,9 +691,11 @@ addEventListener('keydown', e => {
   }
   keys.add(e.code);
   if (e.code === 'Escape') {
-    if (!$('intro').hidden) $('intro').hidden = true;
-    else if (!abandonTeaching()) for (const id of ['yard', 'map-panel']) if (!$(id).hidden) $(id).hidden = true;
+    const open = ['intro', 'yard', 'map-panel'].filter(id => !$(id).hidden);
+    if (open.length) for (const id of open) $(id).hidden = true;
+    else togglePause();
   }
+  if (e.code === 'KeyP') togglePause();
   if (e.code === 'Slash') showIntro();
   // With the map open the same three keys work the map's zoom instead of the camera's,
   // which is the thing you are actually looking at.
@@ -724,12 +726,68 @@ function teleportHome() {
   streamer.settle(craft.x, craft.z, 200);
 }
 
+// ---------------------------------------------------------------- the pause menu
+// A held-on-station panel is not a pause: fuel still burns, a deadline still runs down and
+// a guard still shoots. This one stops the clock. The controls live in it, because a legend
+// pinned over the game is read once and looked past for the rest of the session.
+let paused = false;
+
+function renderPause() {
+  const who = subject();
+  const region = world.regionAt(who.x, who.z);
+  $('pause-where').textContent = `${region.name} \u00b7 DAY ${profile.day} \u00b7 SEED ${seed}`;
+  $('pause-state').textContent = stance === 'afoot'
+    ? 'ON FOOT. THE WORLD IS STOPPED.'
+    : stance === 'landed' ? 'ON THE GROUND. THE WORLD IS STOPPED.' : 'IN THE AIR. THE WORLD IS STOPPED.';
+  const active = profile.active;
+  $('pause-job').textContent = active
+    ? `${active.title} \u00b7 ${active.distanceKm} km \u00b7 ${active.pay} on delivery.`
+    : 'Nothing in hand. The board is top right, or press B for the yard.';
+  $('pause-note').textContent = `CASH ${profile.cash} \u00b7 ${profile.completed.length} JOBS ON THE BOOKS \u00b7 SAVED IN THIS BROWSER PER SEED`;
+  $('pause-mute').textContent = audio.enabled ? 'SOUND ON' : 'SOUND OFF';
+  $('pause-volume').value = String(Math.round(audio.volume * 100));
+  $('pause-volume').disabled = !audio.enabled;
+  $('pause-skip').hidden = !(teaching && !teaching.finished);
+}
+
+function setPaused(on) {
+  if (paused === on) return;
+  paused = on;
+  $('pause').hidden = !on;
+  // Nothing may be left held down across a pause, or the aircraft resumes mid-manoeuvre
+  // with a key it never saw released.
+  if (on) { keys.clear(); mouseFire = false; releaseThumbs(); renderPause(); }
+  audio.update(0, on ? 'paused' : 'playing');
+}
+const togglePause = () => setPaused(!paused);
+
+// Sound preferences are not part of a run, so they are kept per browser rather than per seed.
+const SOUND_KEY = 'merc.sound';
+function saveSound() {
+  try { localStorage.setItem(SOUND_KEY, JSON.stringify({ enabled: audio.enabled, volume: audio.volume })); }
+  catch { /* private window: the session still has sound, it just will not be remembered */ }
+}
+try {
+  const kept = JSON.parse(localStorage.getItem(SOUND_KEY) ?? 'null');
+  if (kept) { audio.volume = kept.volume ?? audio.volume; audio.enabled = kept.enabled !== false; }
+} catch { /* nothing kept */ }
+
+onTap($('pause-resume'), () => setPaused(false));
+onTap($('pause-brief'), showIntro);
+onTap($('pause-yard'), () => { setPaused(false); toggleYard(); });
+onTap($('pause-skip'), () => { abandonTeaching(); renderPause(); });
+onTap($('pause-mute'), () => { audio.setEnabled(!audio.enabled); saveSound(); renderPause(); });
+$('pause-volume').addEventListener('input', e => {
+  audio.setVolume(Number(e.target.value) / 100);
+  saveSound();
+});
+
 // With a panel open the aircraft holds station instead of drifting off across the region
 // while you read. Fuel, repair and the rest of the loop keep running.
 // On a phone the contract board is a sheet rather than a permanent panel, so reading it
 // holds the aircraft on station the way the map and the yard do.
 const overlayOpen = () => !$('intro').hidden || !$('yard').hidden || !$('map-panel').hidden
-  || $('outfit').classList.contains('open');
+  || !$('pause').hidden || $('outfit').classList.contains('open');
 
 // Nothing held, for when a panel is up.
 const IDLE_STICK = { x: 0, y: 0, aimX: 0, aimY: 0, boost: false, climb: false, descend: false };
@@ -849,6 +907,14 @@ function renderTeaching() {
     : world.regionAt(craft.x, craft.z).name;
   $('teach-say').textContent = step.say(subjectName);
   $('teach-hint').textContent = step.hint;
+  // A step that wants a button puts it up in a size nobody can miss. On a phone the key is
+  // no use, so the thumb control is named instead of a key that does not exist.
+  const key = isTouch ? (step.touch ?? null) : (step.key ?? null);
+  $('teach-press').hidden = !key;
+  if (key) {
+    $('teach-key').textContent = key;
+    $('teach-verb').textContent = step.verb ?? 'PRESS';
+  }
 }
 
 // What each step needs set up when it begins.
@@ -962,10 +1028,12 @@ function walk(dt) {
   // A stride driven by distance covered rather than by time, so the legs do not pedal on the
   // spot when the pilot stops.
   const effort = Math.min(1, pilot.pace / WALK);
-  const swing = Math.sin(pilot.stride * 2.6) * effort * 0.6;
+  // The stride is distance covered, so the frequency is per unit travelled rather than per
+  // second: at a run that is a fast turnover, not a blur.
+  const swing = Math.sin(pilot.stride * 0.85) * effort * 0.6;
   figure.legLeft.rotation.x = swing;
   figure.legRight.rotation.x = -swing;
-  figure.body.position.y = 0.92 + Math.abs(Math.cos(pilot.stride * 2.6)) * 0.05 * effort;
+  figure.body.position.y = 0.92 + Math.abs(Math.cos(pilot.stride * 0.85)) * 0.05 * effort;
 }
 
 function flight(dt) {
@@ -974,7 +1042,9 @@ function flight(dt) {
 
   // Out of the aircraft: the pilot walks and the machine sits where it was left.
   if (stance === 'afoot') { walk(dt); holdAircraft(dt); serviceOrBurn(dt, false); return; }
-  // On the ground: nothing moves until the collective comes up.
+  // On the ground: nothing moves until the collective comes up. SPACE is only ever the
+  // collective — the gun is on the left mouse button and ENTER — so holding it to take off
+  // no longer empties the cannon into the yard.
   if (stance === 'landed') {
     if (!(held.has('Space') || stick.climb)) { holdAircraft(dt); serviceOrBurn(dt, false); return; }
     liftOff();
@@ -1909,6 +1979,7 @@ for (const [id, action] of Object.entries({
   },
   'rail-home': () => { teleportHome(); flash('BACK ON THE PAD'); },
   'rail-panels': () => document.body.classList.toggle('telemetry'),
+  'rail-menu': togglePause,
 })) onTap($(id), event => { event.preventDefault(); action(); });
 
 // The weapon tiles are the 1/2/3 keys for a thumb. Delegated, because renderWeapons
@@ -1934,14 +2005,19 @@ let last = 0, frames = 0, fpsAccum = 0, fps = 60, clock = 0, buildHitch = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(last ? (now - last) / 1000 : 1 / 60, 0.05);
-  last = now; clock += dt;
+  last = now;
+  // Paused means paused: no flight, no combat, no deadline, no fuel, and no clock, so the
+  // water stops moving too. The picture is still drawn, because the world behind the menu
+  // is half the reason to stop and look at it.
+  if (paused) { stage.render(); return; }
+  clock += dt;
   fpsAccum += dt; frames++;
   if (fpsAccum > 0.4) { fps = frames / fpsAccum; frames = 0; fpsAccum = 0; }
 
   flight(dt);
   syncHostiles(combat, world, profile, [...streamer.resident.keys()]);
   const events = stepCombat(combat, world, profile, craft,
-    { fire: flying() && (keys.has('Space') || mouseFire || touchInput.fire),
+    { fire: flying() && (keys.has('Enter') || keys.has('NumpadEnter') || mouseFire || touchInput.fire),
       flare: flying() && (keys.has('KeyF') || touchInput.flare) }, dt);
   for (const event of events) {
     if (event.type === 'destroyed') {
@@ -2082,6 +2158,7 @@ window.merc = {
       speedKmh: Math.round(unitsToKmh(Math.hypot(pilot.vx, pilot.vz))), visible: figure.group.visible },
     toAircraft: +Math.hypot(pilot.x - craft.x, pilot.z - craft.z).toFixed(2),
     rotor: +rotorSpeed.toFixed(3),
+    paused,
     teaching: teaching && tutorialStep(teaching) ? tutorialStep(teaching).id : null,
     teachingDone: !!teaching?.finished,
     mapOpened,
@@ -2109,6 +2186,8 @@ window.merc = {
   intro: () => { showIntro(); return true; },
   // Landing, and getting in and out, for the browser suite.
   land: (seconds = 6) => { landingAssist = performance.now() + seconds * 1000; return true; },
+  pause: on => { setPaused(on === undefined ? !paused : !!on); return paused; },
+  sound: () => ({ enabled: audio.enabled, volume: +audio.volume.toFixed(2) }),
   teachStep: () => (teaching && tutorialStep(teaching) ? tutorialStep(teaching).id : null),
   teachSay: () => $('teach-say').textContent,
   skipTeaching: () => abandonTeaching(),
@@ -2171,7 +2250,10 @@ window.merc = {
       for (const key of Object.keys(input)) if (input[key]) keys.add(key); else keys.delete(key);
       flight(step);
       syncHostiles(combat, world, profile, [...streamer.resident.keys()]);
-      const evs = stepCombat(combat, world, profile, craft, { fire: keys.has("Space"), flare: keys.has("KeyF") }, step);
+      // Guarded the way the real loop guards it, or the harness can shoot while the pilot
+      // is stood in the yard on foot.
+      const evs = stepCombat(combat, world, profile, craft,
+        { fire: flying() && keys.has('Enter'), flare: flying() && keys.has('KeyF') }, step);
       for (const e of evs) { if (e.type === "destroyed") profile.cash += Math.round(e.score / 4); if (e.type === "downed") loseAircraft(); }
       const d = combatStandingDeltas(evs); if (Object.keys(d).length) applyStanding(profile, d);
       updateActive(step);

@@ -5,6 +5,7 @@
     "The whole opening plays through in order, from the yard to a settled delivery",
     "The briefing is a reference panel that still describes the region actually generated",
     "Another seed opens the same way in its own region, and the teaching can be abandoned",
+    "ESC stops the world and opens a menu that holds every control, the sound and the brief",
     "Renders on WebGPU and on the WebGL 2 fallback, to the same picture",
     "The frame keeps the original upbeat range, and each area carries its own tone",
     "Real keyboard input flies the aircraft at a modern gunship cruise and top speed",
@@ -12,9 +13,10 @@
     "The arrow keys aim independently of where the aircraft is flying",
     "The mouse aims: the nose points at the ground under the cursor",
     "Rounds go where the aircraft is pointing, not where it is flying",
+    "Ascend and fire are two separate controls, not one key doing both jobs",
     "Holding the descend control puts the aircraft down on its skids, and the rotor winds down",
     "Q puts the pilot out on foot, on the surface, with the camera on them",
-    "The pilot walks and runs at human speeds, and the panel reports theirs, not the aircraft",
+    "The pilot walks and runs fast enough to cross the yard, and the panel reports theirs",
     "You have to walk back to the aircraft to climb into it",
     "The collective lifts it off again and the rotor comes back up",
     "Water and cliffs refuse a landing, and say why",
@@ -89,6 +91,7 @@
       },
       "toAircraft": 5,
       "rotor": 0.928,
+      "paused": false,
       "teaching": "yard",
       "teachingDone": false,
       "mapOpened": false,
@@ -98,7 +101,7 @@
       "sun": 3.75,
       "hemi": 1.78,
       "fps": 60,
-      "streamMs": 0.02,
+      "streamMs": 0.04,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -118,7 +121,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 84.7
+        "ms": 78.2
       },
       "mapMs": 0,
       "cameraClearance": 155.9
@@ -141,6 +144,63 @@
         "spend",
         "done"
       ],
+      "prompts": {
+        "yard": {
+          "key": "W A S D",
+          "verb": "USE THE",
+          "size": 31
+        },
+        "trade": {
+          "key": "W A S D",
+          "verb": "USE THE",
+          "size": 31
+        },
+        "board": {
+          "key": "Q",
+          "verb": "PRESS",
+          "size": 31
+        },
+        "lift": {
+          "key": "SPACE",
+          "verb": "HOLD",
+          "size": 31
+        },
+        "fly": {
+          "key": "W A S D",
+          "verb": "USE THE",
+          "size": 31
+        },
+        "job": {
+          "key": null,
+          "verb": "USE THE",
+          "size": 31
+        },
+        "map": {
+          "key": "M",
+          "verb": "PRESS",
+          "size": 31
+        },
+        "drop": {
+          "key": "E",
+          "verb": "HOLD",
+          "size": 31
+        },
+        "home": {
+          "key": null,
+          "verb": "HOLD",
+          "size": 31
+        },
+        "spend": {
+          "key": "B",
+          "verb": "PRESS",
+          "size": 31
+        },
+        "done": {
+          "key": null,
+          "verb": "PRESS",
+          "size": 31
+        }
+      },
       "job": "Run cargo to BRINE STATION",
       "paid": {
         "before": 4800,
@@ -149,6 +209,14 @@
       "secondSeed": {
         "region": "THE LONG SAVANNA",
         "sentence": "This is the yard: two tents and a scrape of dirt in THE LONG SAVANNA, because nobody else wanted it."
+      }
+    },
+    "pause": {
+      "documented": 34,
+      "held": {
+        "moved": 0,
+        "burned": 0,
+        "hit": 0
       }
     },
     "backends": {
@@ -168,7 +236,7 @@
       }
     },
     "look": {
-      "lum": 0.559,
+      "lum": 0.558,
       "sat": 0.561,
       "max": 0.808,
       "spread": 3.5,
@@ -303,13 +371,13 @@
           "aiming": false
         }
       },
-      "behind": -0.997594,
+      "behind": -0.99837,
       "across": 0.002811999999999981,
       "rounds": {
         "count": 1,
         "dir": {
-          "x": -0.12941286162479576,
-          "z": 0.9915907982863101
+          "x": -0.12198995897926371,
+          "z": 0.9925313344717323
         },
         "nose": {
           "x": -0.139,
@@ -321,13 +389,23 @@
         }
       }
     },
+    "controls": {
+      "onSpace": {
+        "shots": 0,
+        "climbed": 13.526419359294945
+      },
+      "onTrigger": {
+        "shots": 3,
+        "climbed": 0
+      }
+    },
     "onFoot": {
       "skidHeight": 1.7,
       "rotorParked": 0.111,
       "stepOut": 5,
-      "walkKmh": 7,
-      "runKmh": 20,
-      "refusedAt": 12,
+      "walkKmh": 40,
+      "runKmh": 110,
+      "refusedAt": 12.2,
       "refusals": {
         "water": {
           "ok": false,
@@ -502,7 +580,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 84.7
+        "ms": 78.2
       }
     },
     "pokeThrough": {
@@ -512,7 +590,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 133,
+      "ms": 120,
       "sameTwice": true
     },
     "mapNavigation": {
@@ -530,7 +608,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 133,
+        "ms": 120,
         "size": 620,
         "redraws": 1,
         "settled": true
@@ -549,7 +627,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 128,
+        "ms": 114,
         "size": 620,
         "redraws": 2,
         "settled": true
@@ -568,7 +646,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 108,
+        "ms": 97,
         "size": 620,
         "redraws": 3,
         "settled": true
@@ -587,7 +665,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 170,
+        "ms": 128,
         "size": 620,
         "redraws": 4,
         "settled": true
@@ -606,7 +684,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 140,
+        "ms": 113,
         "size": 620,
         "redraws": 5,
         "settled": true
@@ -625,7 +703,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 118,
+        "ms": 104,
         "size": 620,
         "redraws": 6,
         "settled": true
@@ -646,7 +724,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.1439150599899355
+      "paidOut": 2.3594796223739576
     },
     "job": {
       "cash": 5000,
@@ -679,7 +757,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0.04,
+      "worst": 0.02,
       "resident": 35,
       "nodes": 7255
     }

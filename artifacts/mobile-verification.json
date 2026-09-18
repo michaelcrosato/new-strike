@@ -5,9 +5,9 @@
     "A thumb can skip the teaching and take the aircraft up (portrait)",
     "The briefing is reached from the yard, fits the screen, and a tap gets past it (portrait)",
     "No panel hangs off the edge of the screen and the page does not scroll (portrait)",
-    "The heads-up chrome leaves most of the world visible: 15% covered (portrait)",
+    "The heads-up chrome leaves most of the world visible: 16% covered (portrait)",
     "A thumb on the flight stick flies the aircraft, and releasing it centres (portrait)",
-    "The fire button shoots and the winch button pays out the cable (portrait)",
+    "The fire button shoots, the winch pays the cable out, and climbing is its own button (portrait)",
     "The aim stick points the aircraft, and centres when released (portrait)",
     "Pinching the world reaches both ends of the eight-step zoom (portrait)",
     "Game gestures do not become browser page-zoom (portrait)",
@@ -16,6 +16,7 @@
     "Dragging the region map pans it, stays inside the region, and does not redraw per gesture (portrait)",
     "The map resets to the whole region and closes on a tap (portrait)",
     "The rail opens the contract board and the yard, both readable and closable (portrait)",
+    "The rail pauses the world and the menu fits with every button reachable (portrait)",
     "Weapon tiles switch weapons on a tap (portrait)",
     "The rail button returns the aircraft to its own pad (portrait)",
     "The rail lands the aircraft, puts the pilot out, and the stick walks them (portrait)",
@@ -26,7 +27,7 @@
     "No panel hangs off the edge of the screen and the page does not scroll (landscape)",
     "The heads-up chrome leaves most of the world visible: 22% covered (landscape)",
     "A thumb on the flight stick flies the aircraft, and releasing it centres (landscape)",
-    "The fire button shoots and the winch button pays out the cable (landscape)",
+    "The fire button shoots, the winch pays the cable out, and climbing is its own button (landscape)",
     "The aim stick points the aircraft, and centres when released (landscape)",
     "Pinching the world reaches both ends of the eight-step zoom (landscape)",
     "Game gestures do not become browser page-zoom (landscape)",
@@ -35,6 +36,7 @@
     "Dragging the region map pans it, stays inside the region, and does not redraw per gesture (landscape)",
     "The map resets to the whole region and closes on a tap (landscape)",
     "The rail opens the contract board and the yard, both readable and closable (landscape)",
+    "The rail pauses the world and the menu fits with every button reachable (landscape)",
     "Weapon tiles switch weapons on a tap (landscape)",
     "The rail button returns the aircraft to its own pad (landscape)",
     "The rail lands the aircraft, puts the pilot out, and the stick walks them (landscape)",
@@ -95,12 +97,13 @@
           "visible": true
         },
         "toAircraft": 5,
-        "rotor": 0.568,
+        "rotor": 0.536,
+        "paused": false,
         "teaching": "yard",
         "teachingDone": false,
         "mapOpened": false,
-        "tint": "#fffaee",
-        "tintAmount": 0.148,
+        "tint": "#fff9ec",
+        "tintAmount": 0.16,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
@@ -125,16 +128,22 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 81.9
+          "ms": 72.1
         },
         "mapMs": 0,
         "cameraClearance": 155.9
       },
       "teaching": {
-        "top": 468,
+        "top": 449,
         "bottom": 558,
         "left": 12,
         "right": 378
+      },
+      "prompt": {
+        "shown": true,
+        "key": "STICK",
+        "verb": "USE THE",
+        "size": 24
       },
       "fit": {
         "problems": [],
@@ -167,7 +176,7 @@
             "x": 328,
             "y": 62,
             "w": 52,
-            "h": 193
+            "h": 226
           },
           "#flash": {
             "x": 12,
@@ -180,11 +189,28 @@
         "vw": 390,
         "vh": 844
       },
-      "coveredPercent": 15,
-      "travelled": 8.8,
+      "coveredPercent": 16,
+      "travelled": 8.5,
       "fire": {
         "peakShots": 5,
         "cablePaid": 10.01
+      },
+      "separateControls": {
+        "climb": {
+          "id": "touch-climb",
+          "l": 57,
+          "r": 103,
+          "t": 578,
+          "b": 624
+        },
+        "trigger": {
+          "id": "touch-fire",
+          "l": 282,
+          "r": 374,
+          "t": 732,
+          "b": 824
+        },
+        "apart": true
       },
       "aimStick": {
         "up": 1,
@@ -229,7 +255,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 206,
+          "ms": 152,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -248,7 +274,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 185,
+          "ms": 156,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -267,7 +293,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 185,
+          "ms": 156,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -288,7 +314,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 185,
+          "ms": 156,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -307,7 +333,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 185,
+          "ms": 156,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -326,7 +352,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 202,
+          "ms": 109,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -340,9 +366,43 @@
         "scrollable": true,
         "fittings": 9
       },
+      "pause": {
+        "inside": true,
+        "columns": 1,
+        "thumbs": "block",
+        "keys": "none",
+        "buttons": [
+          {
+            "id": "pause-mute",
+            "w": 87,
+            "h": 39,
+            "inView": true
+          },
+          {
+            "id": "pause-resume",
+            "w": 356,
+            "h": 39,
+            "inView": true
+          },
+          {
+            "id": "pause-brief",
+            "w": 174,
+            "h": 39,
+            "inView": true
+          },
+          {
+            "id": "pause-yard",
+            "w": 174,
+            "h": 39,
+            "inView": true
+          }
+        ],
+        "scrollable": "fits"
+      },
       "onFoot": {
-        "walkKmh": 15,
-        "stepOut": 5
+        "walkKmh": 83,
+        "stepOut": 5,
+        "walkedOut": 11.38
       }
     },
     "landscape": {
@@ -397,17 +457,18 @@
           "visible": true
         },
         "toAircraft": 5,
-        "rotor": 0.796,
+        "rotor": 0.727,
+        "paused": false,
         "teaching": "yard",
         "teachingDone": false,
         "mapOpened": false,
-        "tint": "#fffdf7",
-        "tintAmount": 0.069,
+        "tint": "#fffcf4",
+        "tintAmount": 0.093,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
         "fps": 60,
-        "streamMs": 0.04,
+        "streamMs": 0.05,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -427,16 +488,22 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 122.8
+          "ms": 107.2
         },
         "mapMs": 0,
         "cameraClearance": 155.9
       },
       "teaching": {
-        "top": 209,
+        "top": 193,
         "bottom": 294,
         "left": 210,
         "right": 634
+      },
+      "prompt": {
+        "shown": true,
+        "key": "STICK",
+        "verb": "USE THE",
+        "size": 31
       },
       "fit": {
         "problems": [],
@@ -469,7 +536,7 @@
             "x": 782,
             "y": 46,
             "w": 52,
-            "h": 152
+            "h": 178
           },
           "#flash": {
             "x": 381,
@@ -483,10 +550,27 @@
         "vh": 390
       },
       "coveredPercent": 22,
-      "travelled": 9,
+      "travelled": 9.1,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 9.65
+        "cablePaid": 9.64
+      },
+      "separateControls": {
+        "climb": {
+          "id": "touch-climb",
+          "l": 370,
+          "r": 418,
+          "t": 320,
+          "b": 368
+        },
+        "trigger": {
+          "id": "touch-fire",
+          "l": 746,
+          "r": 828,
+          "t": 294,
+          "b": 376
+        },
+        "apart": true
       },
       "aimStick": {
         "up": 1,
@@ -531,7 +615,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 311,
+          "ms": 174,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -550,7 +634,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 309,
+          "ms": 229,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -569,7 +653,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 309,
+          "ms": 229,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -590,7 +674,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 309,
+          "ms": 229,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -609,7 +693,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 309,
+          "ms": 229,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -628,7 +712,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 193,
+          "ms": 139,
           "size": 709,
           "redraws": 3,
           "settled": false
@@ -642,9 +726,43 @@
         "scrollable": true,
         "fittings": 9
       },
+      "pause": {
+        "inside": true,
+        "columns": 2,
+        "thumbs": "block",
+        "keys": "none",
+        "buttons": [
+          {
+            "id": "pause-mute",
+            "w": 78,
+            "h": 30,
+            "inView": true
+          },
+          {
+            "id": "pause-resume",
+            "w": 304,
+            "h": 39,
+            "inView": true
+          },
+          {
+            "id": "pause-brief",
+            "w": 217,
+            "h": 39,
+            "inView": true
+          },
+          {
+            "id": "pause-yard",
+            "w": 217,
+            "h": 39,
+            "inView": true
+          }
+        ],
+        "scrollable": true
+      },
       "onFoot": {
-        "walkKmh": 15,
-        "stepOut": 5
+        "walkKmh": 83,
+        "stepOut": 5,
+        "walkedOut": 11.52
       }
     }
   }

@@ -53,10 +53,34 @@ test('every step is one sentence, with something to do and a name', () => {
     const stops = sentence.match(/[.!?]/g) ?? [];
     assert.equal(stops.length, 1, `${step.id} is ${stops.length} sentences: "${sentence}"`);
     assert.ok(sentence.trim().endsWith('.'), `${step.id} ends in a full stop`);
-    assert.ok(step.hint && step.hint.length < 30, `${step.id} has a short hint`);
+    assert.ok(step.hint && step.hint.length < 40, `${step.id} has a short hint`);
+    // A step whose condition is a button press has to name the button, both for a keyboard
+    // and for a thumb, because the panel shows it at a size that is the whole point: nobody
+    // should be stuck outside the aircraft wondering what to press.
+    if (step.key) {
+      assert.ok(step.key.length <= 7, `${step.id} names a key that fits the badge: "${step.key}"`);
+      assert.ok(step.touch, `${step.id} names the thumb control too`);
+      assert.ok(step.touch.length <= 8, `${step.id} names a thumb control that fits: "${step.touch}"`);
+      assert.match(step.verb, /^(PRESS|HOLD|USE THE)$/, `${step.id} says how to press it`);
+    }
     assert.equal(typeof step.done, 'function', `${step.id} can be completed`);
     assert.ok(step.minSeconds > 0 && step.minSeconds <= 6, `${step.id} holds for ${step.minSeconds}s`);
   }
+});
+
+test('every step that waits for a button press names the button', () => {
+  // The steps that wait for something other than a key press are the ones that ask you to
+  // walk somewhere, fly somewhere, or simply read: those have nothing to name.
+  const waits = { board: 'Q', lift: 'SPACE', map: 'M', drop: 'E', spend: 'B' };
+  for (const [id, key] of Object.entries(waits)) {
+    const step = TUTORIAL.find(s => s.id === id);
+    assert.ok(step, `there is a ${id} step`);
+    assert.equal(step.key, key, `${id} puts ${key} on screen`);
+  }
+  // And the two verbs mean different things: E and the collective are held, not tapped.
+  assert.equal(TUTORIAL.find(s => s.id === 'lift').verb, 'HOLD');
+  assert.equal(TUTORIAL.find(s => s.id === 'drop').verb, 'HOLD');
+  assert.equal(TUTORIAL.find(s => s.id === 'board').verb, 'PRESS');
 });
 
 test('it teaches in an order that makes sense', () => {

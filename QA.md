@@ -16,10 +16,17 @@ The source objective is the pasted brief: a finished browser-game vertical slice
 | Mobile controls | Two simultaneous real CDP touch contacts fly and fire; quick flare tap, weapon tiles and held resupply work. Layout inspected at 915×412, 412×915 and 780×360. |
 | RTX 4070 SUPER target | Browser renderer identifies NVIDIA GeForce RTX 4070 SUPER / ANGLE D3D11. Brief 1440×900 Cinematic scene samples report approximately 141–144 FPS. These are smoke measurements, not a sustained hardware benchmark. |
 | Samsung S26 target | Responsive Android touch layouts, capped render density, mobile graphics preset and adaptive quality are implemented and tested via device emulation. Physical S26 performance remains unmeasured. |
-| Single-file delivery | `dist/blockhawk.html`, served at `/blockhawk.html`, approximately 815 KiB. The site root now belongs to MERCENARY STRIKE, the open world this campaign grew into; the campaign build itself is byte-identical to the audited one. Rendering library, models, textures, subset interface fonts, UI, synthesized audio and third-party notices are embedded. Offline `file://` launch and deployment pass, with zero external asset requests. |
+| Single-file delivery | `dist/blockhawk.html`, served at `/blockhawk.html`, approximately 815 KiB. The site root now belongs to MERCENARY STRIKE, the open world this campaign grew into; the campaign build is the audited one, less a duplicate object key that never changed what it returned (see the hash note below). Rendering library, models, textures, subset interface fonts, UI, synthesized audio and third-party notices are embedded. Offline `file://` launch and deployment pass, with zero external asset requests. |
 
 The browser suite also checks full reset, fuel failure, audio start/mute, paused simulation invariants, best-score/settings storage, offline delivery and the absence of test controls in normal play. `artifacts/verification.json` contains the latest results. `artifacts/hardware.json` records the GPU identification; screenshots are in `artifacts/`.
 
 The full browser mission test uses accelerated simulation controls and normal combat rules. It does not teleport, modify health/ammo, skip stages or disable enemies during that run. Separate focused input and visual checks intentionally use fixtures. A human player can take time to read the map and manage supplies; the test pilot is a speed run, not a play-duration estimate.
 
-Final HTML SHA-256: `094648EAD79167A3C246745C0B812A40C9C6050AB8AD61043334283B843CFF7F`.
+Final HTML SHA-256: `3599D7AAC41450736242128C54672C6739C3699B56872945489B160C2E9A02C8`.
+
+That hash moved once, on 2026-09-17, for a one-line source fix rather than a change of
+behaviour: `window.blockhawk.getState()` listed `delivered` twice in the same object
+literal, which the build had been warning about. Both copies held the same value, so the
+object it returns is identical; the duplicate is simply gone. The nineteen browser checks
+above were re-run against the rebuilt file and all pass. The previous audited hash was
+`094648EAD79167A3C246745C0B812A40C9C6050AB8AD61043334283B843CFF7F`.

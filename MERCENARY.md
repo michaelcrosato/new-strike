@@ -10,14 +10,15 @@ the twelve kinds of job you fly.
 
 ```powershell
 npm run world          # builds the game and serves it
-npm test               # 148 checks across ten suites
-npm run verify:world   # 33 browser checks against the built bundle (server must be running)
+npm test               # 149 checks across ten suites
+npm run verify:world   # 35 browser checks against the built bundle (server must be running)
 ```
 
-Open **http://localhost:4189**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
-`SPACE` fire, `E` winch, scan or mark, `F` flares, `1 2 3` weapons,
-**wheel or `-` `=` zoom**, `0` reset the view, `Q` get out or climb back in,
-`B` the yard, `M` region map, `H` back to the pad, `G` hide the panels, `/` the brief.
+Open **http://localhost:4189**. `ESC` is the pause menu, and **every control is in it** —
+there is no legend pinned over the game. The short version: `W A S D` fly, the mouse or the
+arrow keys aim, `SHIFT` throttle, `SPACE` the collective, `C` descend, **left mouse or
+`ENTER` fire**, `E` winch, `F` flares, `1 2 3` weapons, `Q` get out or climb back in, `B` the
+yard, `M` the map, `H` back to the pad, wheel or `-` `=` zoom, `/` the brief.
 `?seed=12345` generates a different region.
 
 MERCENARY STRIKE is what the site serves at its root. The BLOCKHAWK campaign it grew out of
@@ -323,10 +324,15 @@ day to be flying.
 independent of where the nose is, so the aircraft crabs, slides and flies backwards the way a
 gunship actually fights: you can run from a checkpoint with the gun still on it.
 
-| | fly | aim | land | get out |
-| --- | --- | --- | --- | --- |
-| desktop | `W A S D` | the mouse, or the arrow keys | hold `C` | `Q` |
-| phone | left thumb stick | right thumb stick (hold to fire, slide to aim) | the rail's LAND | the same button again |
+| | fly | aim | climb | fire | land | get out |
+| --- | --- | --- | --- | --- | --- | --- |
+| desktop | `W A S D` | the mouse, or the arrow keys | `SPACE` | left mouse, or `ENTER` | hold `C` | `Q` |
+| phone | left thumb stick | right thumb stick (slide to aim) | `▲` | AIM · FIRE | the rail's LAND | the same button again |
+
+**Climbing and firing are two controls, not one.** `SPACE` used to be both: taking off
+emptied the cannon into the sky, and there was no way to climb without shooting. The
+collective is `SPACE` and the trigger is the left mouse button or `ENTER`, which is the pair
+a thumb already had in `▲` and AIM · FIRE.
 
 On foot the left stick walks instead of flying, and the right one still points the pilot.
 
@@ -392,11 +398,17 @@ eight units of the aircraft.
 
 On foot:
 
-- the pilot **walks at 7 km/h and runs at 20**, which is a generous sprint in flight gear but
-  makes crossing a hundred-and-fifty-metre settlement a twenty-seven-second job rather than a
-  two-minute one
+- the pilot **walks at 40 km/h and runs at 110** — not a human pace, and deliberately not.
+  It was 7 and 20, which is what a person in flight gear actually manages, and at this camera
+  height across a yard eighty metres wide it read as standing still. These are more than five
+  times that: the yard crosses in seven seconds and a settlement in five, which is what being
+  on foot has to feel like for it to be worth doing at all
 - the camera comes in to **42% of the flight view**, because a person is under two units tall
-  in a hundred-unit frame, and it frames the pilot rather than the machine
+  in a hundred-unit frame, and it frames the pilot rather than the machine. 60% was tried
+  for the faster pace and measured: the figure came out five pixels high in a 1456-wide
+  window, which is a speck with a ring round it
+- both of you keep a **ring on the ground** at any zoom while the pilot is out: amber where
+  the machine is, blue on the pilot
 - the streamer loads around **whoever you are controlling**, so walking away keeps the world
   coming
 - the telemetry panel reports the pilot's position, altitude and pace — reading the parked
@@ -554,7 +566,7 @@ something the player has to actually do:
 | `yard` | names the region you are standing in — walk |
 | `trade` | you fly for money, no army and no flag — keep walking |
 | `board` | that machine is everything you own — `Q` at the door |
-| `lift` | `SPACE` is the collective — take her up |
+| `lift` | `SPACE` is the collective — hold it and take her up |
 | `fly` | `W A S D` flies her, the mouse points her — get clear of the pad |
 | `job` | there is already a crate aboard, for a named settlement |
 | `map` | `M` for the region, the ring is the drop — open it |
@@ -562,6 +574,12 @@ something the player has to actually do:
 | `home` | your own pad is the only place that refuels you — go back |
 | `spend` | `B` for the yard, where the fee becomes fittings and people — open it |
 | `done` | take another and keep going until you own something |
+
+Each step that waits for a button **puts that button on screen at 26px**, with PRESS or HOLD
+over it, next to the sentence — `Q` at the door, `SPACE` for the collective, `M`, `E`, `B`.
+On a phone it names the control a thumb actually has instead: STICK, GET OUT, `▲`, MAP,
+WINCH, YARD. A player who cannot work out how to get into the aircraft never finds out
+whether they like the game, and that was the one thing the opening could not afford.
 
 A step holds its sentence for its own minimum however fast the player is, so the script cannot
 flicker past in the first two seconds; it then waits for its own condition and nothing else,
@@ -597,8 +615,8 @@ meshing with blended biomes, flight, the region map with region names and landma
 combat with streamed garrisons, standing-driven hostility, all twelve contract kinds with
 their failure states, four complications, the contract board, payment, the day rolling over,
 the yard with upgrades and hiring, saving, the yard you stand in and the eleven-step opening
-that teaches it, the briefing as a reference panel, sound, the winch, and the telemetry that
-shows all of it.
+that teaches it, the briefing as a reference panel, the pause menu that stops the world and holds every
+control, sound, the winch, and the telemetry that shows all of it.
 
 Also wired: eight steps of zoom to eight times the default view, reachable by wheel, by key
 and by pinching the world; the coarse region mesh that fills the far field; and the
@@ -656,17 +674,39 @@ picture sharpens a moment after it stops. Six quick pans cost one redraw, not si
 earlier version redrew on every release and blocked the main thread for most of a second,
 which was long enough for the browser to throw away the next tap.
 
+## The pause menu
+
+`ESC`, or MENU on the rail. There was no pause at all before this: opening a panel held the
+aircraft on station while fuel burned, a deadline ran down and a garrison kept shooting. This
+one stops the world — no flight, no combat, no missions, no fuel, and no clock, so the water
+stops moving too — and keeps drawing the frame behind it, because the world is half the
+reason to stop and look.
+
+It is also where the controls live. A legend pinned over the game is read once and looked past
+for the rest of the session, so the ten-line card that used to sit in the bottom-right corner
+is gone and its contents are here, in two columns: the aircraft, on foot, the world. A phone
+gets the thumb controls and the rail in the same panel instead, because being told to press
+`W A S D` is no use to it.
+
+The rest of it is the basic stuff you want when you stop: where you are, the day, the seed,
+what is in your hands, the cash and the job count, the sound (a mute and a volume, kept per
+browser rather than per seed), and the way into the brief and the yard. The brief opens on top
+of the menu and drops you back into it; the yard closes it, because the yard is a panel rather
+than a pause.
+
 ## Verification
 
-- **148 module checks** across ten suites: the campaign parity harness, the campaign
+- **149 module checks** across ten suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
   layer with its landmarks and place names, the newer four kinds with their complications,
   flight and the speed envelope, landing and walking, and the opening script — which is played
   through the way a player would play it and checked for one sentence per step, an order that
   teaches boarding before flying, a step that cannot be skipped past in a single frame, and a
   minute that does not turn into five.
-- **33 browser checks** (`npm run verify:world`) against the built single file served at the
-  site root: it boots and renders on both backends to the same picture, a first run starts on
+- **35 browser checks** (`npm run verify:world`) against the built single file served at the
+  site root: it boots and renders on both backends to the same picture, `ESC` stops the world
+  and opens a menu that documents all 34 controls and carries the sound and the brief, the
+  collective climbs without firing and the trigger fires without climbing, a first run starts on
   foot in a yard that exists and is taught one sentence at a time with the sentence clear of
   every panel at three window sizes, the whole opening plays through in order from the yard to
   a settled delivery that pays, the briefing opens on demand and still describes the generated
@@ -683,13 +723,15 @@ which was long enough for the browser to throw away the next tap.
   survives a reload with the opening happening once per seed, weather closes in and lifts, a ten-kilometre transit stays bounded, the
   map pans and zooms through its five steps under a real wheel and a real mouse drag and
   redraws the terrain at each scale, and there are no external requests or script errors.
-- **39 mobile checks** (`npm run verify:mobile`), the same built file at 390×844 and 844×390
+- **41 mobile checks** (`npm run verify:mobile`), the same built file at 390×844 and 844×390
   with touch emulation and a phone user agent, driven by real browser-level touch input
   through the debugger protocol rather than synthesised events — so pointer capture, gesture
   recognition and `touch-action` behave as they do under a thumb. Both orientations: it boots
   and knows it has a coarse pointer, the opening sentence is on screen and clear of every
   control a thumb lands on, a tap on SKIP gets past the teaching, the briefing is reached from
-  the yard and fits with its one button on screen, no panel
+  the yard and fits with its one button on screen, the rail pauses the
+  world and the menu fits with every button reachable by a thumb, climbing and firing are
+  separate buttons in separate places, no panel
   hangs off an edge and the page does not scroll sideways, the chrome covers 14% of the screen
   upright and 20% turned over rather than the 63% it used to, a thumb on the stick flies the
   aircraft and releasing it centres, the fire button puts rounds in the air and the winch
@@ -700,5 +742,7 @@ which was long enough for the browser to throw away the next tap.
   the rail opens the board and the yard, weapon tiles switch on a tap, and the home button
   flies you back to the pad.
 
-The BLOCKHAWK campaign is untouched: it still builds to the byte (`dist/blockhawk.html`
-hashes to the value pinned in `QA.md`) and its 19 browser checks still pass. See `README.md`.
+The BLOCKHAWK campaign still builds to the value pinned in `QA.md` and its 19 browser checks
+still pass. That pin moved once, for a duplicate object key in its diagnostics that the build
+had been warning about and that never changed what the object returned; `QA.md` records both
+hashes. See `README.md`.

@@ -9,6 +9,10 @@
 // DOM or the world, which is what makes the whole script testable in order.
 
 /**
+ * A step that wants a button pressed names it in `key`, with `verb` for how to press it.
+ * The harness shows that in a size nobody can miss, because a player who cannot work out
+ * how to get into the aircraft never finds out whether they like the game.
+ *
  * A snapshot is what the harness knows about the player right now:
  *
  *   stance        'afoot' | 'landed' | 'flying'
@@ -26,7 +30,8 @@ export const TUTORIAL = [
     // The region's own name goes in here, so even the first line is about the place that
     // was actually generated.
     say: region => `This is the yard: two tents and a scrape of dirt in ${region}, because nobody else wanted it.`,
-    hint: 'W A S D to walk',
+    hint: 'walk about the yard',
+    key: 'W A S D', touch: 'STICK', verb: 'USE THE',
     minSeconds: 3.5,
     done: s => s.walked > 3,
   },
@@ -34,20 +39,23 @@ export const TUTORIAL = [
     id: 'trade',
     say: () => 'You fly for money: no army, no flag, and no questions that are not about the fee.',
     hint: 'keep walking',
+    key: 'W A S D', touch: 'STICK', verb: 'USE THE',
     minSeconds: 3.5,
     done: s => s.walked > 7,
   },
   {
     id: 'board',
     say: () => 'That machine is everything you own, so walk up to it and press Q to get in.',
-    hint: 'Q at the door',
+    hint: 'stand by the door',
+    key: 'Q', touch: 'GET OUT', verb: 'PRESS',
     minSeconds: 1,
     done: s => s.stance === 'landed' || s.stance === 'flying',
   },
   {
     id: 'lift',
     say: () => 'SPACE is the collective — hold it and take her up.',
-    hint: 'hold SPACE',
+    hint: 'until you are clear of the ground',
+    key: 'SPACE', touch: '▲', verb: 'HOLD',
     minSeconds: 1,
     done: s => s.stance === 'flying' && s.airborne > 8,
   },
@@ -55,6 +63,7 @@ export const TUTORIAL = [
     id: 'fly',
     say: () => 'W A S D flies her and the mouse points her nose, which are two different things.',
     hint: 'fly away from the pad',
+    key: 'W A S D', touch: 'STICK', verb: 'USE THE',
     minSeconds: 2.5,
     done: s => s.flown > 60,
   },
@@ -70,14 +79,16 @@ export const TUTORIAL = [
   {
     id: 'map',
     say: () => 'Press M for the region: the ring is your drop and the rectangle is what you can see.',
-    hint: 'press M',
+    hint: 'the region map',
+    key: 'M', touch: 'MAP', verb: 'PRESS',
     minSeconds: 1,
     done: s => s.mapOpened,
   },
   {
     id: 'drop',
     say: () => 'Fly to the ring and hold E over it to set the crate down.',
-    hint: 'hold E on site',
+    hint: 'hovering over the ring',
+    key: 'E', touch: 'WINCH', verb: 'HOLD',
     minSeconds: 1,
     done: s => s.cargoDown,
   },
@@ -92,7 +103,8 @@ export const TUTORIAL = [
     id: 'spend',
     // The fee is the whole point of the trade, so the last thing taught is where it goes.
     say: () => 'Press B for the yard, where the fee becomes better fittings for her and better people.',
-    hint: 'press B',
+    hint: 'the yard',
+    key: 'B', touch: 'YARD', verb: 'PRESS',
     minSeconds: 1,
     done: s => s.yardOpened,
   },

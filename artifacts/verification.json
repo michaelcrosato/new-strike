@@ -56,7 +56,7 @@
   },
   "mobile": {
     "landscape": {
-      "fps": 131,
+      "fps": 138,
       "quality": "mobile",
       "pixelRatio": 1.3,
       "drawCalls": 158,

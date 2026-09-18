@@ -33,15 +33,22 @@ live. To play on a phone on the same Wi-Fi, open `http://<your-PC-LAN-address>:4
 
 ## MERCENARY STRIKE
 
-**Dual-stick: the left hand flies and the right hand points.** `W A S D` fly · **the mouse or
-the arrow keys aim** · `SHIFT` throttle · `SPACE` climb · `C` descend · `SPACE` fire · `E`
-winch, scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=` zoom** · `0` reset the
-view · `Q` get out or climb back in · `B` the yard · `M` the region map · `H` back to the pad ·
-`G` hide the panels · `/` the brief.
+**`ESC` is the pause menu, and every control is in it.** Nothing is pinned over the game: the
+menu stops the world and lists the lot, with the sound and the brief. The short version —
+**dual-stick: the left hand flies and the right hand points.** `W A S D` fly · **the mouse or
+the arrow keys aim** · `SHIFT` throttle · `SPACE` the collective · `C` descend · **left mouse
+or `ENTER` fire** · `E` winch, scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=`
+zoom** · `0` reset the view · `Q` get out or climb back in · `B` the yard · `M` the region map ·
+`H` back to the pad · `G` hide the panels · `/` the brief.
+
+Climbing and firing are separate controls. `SPACE` was both, so taking off emptied the cannon
+into the sky; a thumb already had them apart in `▲` and AIM · FIRE.
 
 **The first minute teaches itself.** A first run starts you on foot in the yard — two tents, a
 scraped circle of dirt, some drums and a tarpaulin — and gives you one sentence at a time: you
 fly for money, that machine is everything you own, `SPACE` is the collective, `M` is the map.
+Each step that wants a button puts it on screen in large type with PRESS or HOLD over it, so
+nobody is left outside the aircraft wondering what to press.
 A delivery is already in your hands by the time the map is explained, because the first job is
 assigned rather than left on the board: fly to the ring, hold `E`, come home, then `B` for the
 yard, where the fee becomes better fittings and better people. Eleven steps, about a minute, and `ESC` or
@@ -54,8 +61,9 @@ it. On a phone the right thumb is the second stick: hold to fire, slide to aim.
 
 **Hold `C` to set the machine down** — 81% of the dry ground in the region will take it, and
 the sea and a cliff tell you why they will not. Once it is down, **`Q` puts you out on foot**:
-the pilot walks at 7 km/h and runs at 20, the camera comes in close, and the same key climbs
-back in from within eight units of the door. On a phone the rail button does all three in
+the pilot walks at 40 km/h and runs at 110 — not a human pace, deliberately: at this camera
+height a real walk across the yard reads as standing still — the camera comes in close, and
+the same key climbs back in from within eight units of the door. On a phone the rail button does all three in
 turn: LAND, GET OUT, BOARD.
 
 On a phone the left thumb flies — pushed to the rim it runs the throttle up — and the right

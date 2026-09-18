@@ -38,11 +38,13 @@ export const LANDING = {
 };
 
 export const FOOT = {
-  // A person in flight gear. The run is generous — twenty rather than the fifteen a real
-  // sprint in that much kit manages — because a settlement is a hundred and fifty metres
-  // across and nobody wants to spend two minutes crossing one.
-  walkKmh: 7,
-  runKmh: 20,
+  // Not a person's speed, deliberately. A real 7 km/h walk across a yard eighty metres
+  // wide at this camera height reads as standing still, and the region is ten kilometres
+  // across: the pilot is a game character who happens to be on foot, not a pedestrian
+  // simulation. These are more than five times a human pace, which is the floor the walk
+  // has to clear before the yard stops feeling like treacle.
+  walkKmh: 40,
+  runKmh: 110,
   // Legs answer much faster than a rotor does.
   spoolSeconds: 0.22,
   turnRate: 9,
@@ -55,7 +57,8 @@ export const FOOT = {
   // Steeper than this and you are climbing, not walking.
   maxSlope: 0.95,
   // The camera comes in close, because a person is under two units tall and the flight
-  // view is a hundred across.
+  // view is a hundred across. Measured rather than guessed: at 0.6 the figure was five
+  // pixels high in a 1456-wide window, which is a speck with a ring round it.
   viewScale: 0.42,
 };
 

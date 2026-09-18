@@ -92,11 +92,25 @@ try {
   // off, fly out. Sampled in half-second slices because a step that holds for a second would
   // otherwise be stepped straight over without ever being seen.
   const taught = [opening.teaching];
+  const prompts = {};
+  // What the panel is showing right now: the step, and the button it is telling you to press
+  // at a size you could read from across the room.
+  const showing = () => page.evaluate(() => ({
+    step: window.merc.teachStep(),
+    key: document.getElementById('teach-press').hidden ? null : document.getElementById('teach-key').textContent,
+    verb: document.getElementById('teach-verb').textContent,
+    size: Math.round(parseFloat(getComputedStyle(document.getElementById('teach-key')).fontSize)),
+  }));
+  const note = async () => {
+    const now = await showing();
+    if (now.step && now.step !== taught.at(-1)) taught.push(now.step);
+    if (now.step && !(now.step in prompts)) prompts[now.step] = { key: now.key, verb: now.verb, size: now.size };
+  };
+  await note();
   const advance = async (seconds, input) => {
     for (let i = 0; i < seconds * 2; i++) {
       await page.evaluate(held => window.merc.simulate(0.5, held), input);
-      const at = await page.evaluate(() => window.merc.teachStep());
-      if (at && at !== taught.at(-1)) taught.push(at);
+      await note();
     }
     return taught.at(-1);
   };
@@ -140,7 +154,17 @@ try {
   const paid = await outfit();
   assert.ok(paid.cash > handed.cash, `the first job pays: ${handed.cash} -> ${paid.cash}`);
   assert.equal(paid.active, null, 'and there is nothing left in hand');
+  // The whole point of the prompt is that nobody gets stuck outside the aircraft, so the
+  // steps that wait for a button have to be showing that button, in type you cannot miss.
+  for (const [step, key] of [['board', 'Q'], ['lift', 'SPACE'], ['map', 'M'], ['drop', 'E'], ['spend', 'B']]) {
+    assert.equal(prompts[step]?.key, key, `the ${step} step puts ${key} on screen: ${JSON.stringify(prompts[step])}`);
+    assert.ok(prompts[step].size >= 20, `and at ${prompts[step].size}px it is readable`);
+  }
+  assert.equal(prompts.lift.verb, 'HOLD', 'the collective is held, and says so');
+  assert.equal(prompts.drop.verb, 'HOLD', 'and so is the winch');
+  assert.equal(prompts.board.verb, 'PRESS', 'while Q is a press');
   evidence.measurements.opening.taught = taught;
+  evidence.measurements.opening.prompts = prompts;
   evidence.measurements.opening.job = handed.active.title;
   evidence.measurements.opening.paid = { before: handed.cash, after: paid.cash };
   record('The whole opening plays through in order, from the yard to a settled delivery');
@@ -181,6 +205,65 @@ try {
   evidence.measurements.opening.secondSeed = { region: elsewhereRegion, sentence: elsewhereSaid };
   await second.close();
   record('Another seed opens the same way in its own region, and the teaching can be abandoned');
+
+  // ---------------------------------------------------------------- the pause menu
+  // There was no pause at all: a panel held the aircraft on station while fuel burned, a
+  // deadline ran down and a guard kept shooting. ESC stops the world now, and the controls
+  // live in the menu rather than on a card pinned over the game for ever.
+  assert.equal(await page.evaluate(() => document.querySelectorAll('.keys').length), 0,
+    'the key legend is no longer pinned over the game');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('#pause').isVisible(), true, 'ESC opens the menu');
+  assert.equal((await state()).paused, true, 'and the world is stopped');
+  // Every control the game has, in the one place you go to look for them.
+  const menu = await page.evaluate(() => {
+    const keys = [...document.querySelectorAll('#pause .keylist kbd')].map(k => k.textContent);
+    const card = document.querySelector('.pause-card').getBoundingClientRect();
+    return { keys, inView: card.top >= 0 && card.bottom <= innerHeight, text: document.getElementById('pause').textContent };
+  });
+  for (const key of ['W', 'A', 'S', 'D', 'SHIFT', 'SPACE', 'C', 'ENTER', 'LEFT MOUSE', 'E', 'F', 'Q', 'M', 'B', 'H', 'G', '/', 'ESC', '1', '2', '3']) {
+    assert.ok(menu.keys.includes(key), `the menu documents ${key}: ${menu.keys.join(' ')}`);
+  }
+  assert.equal(menu.inView, true, 'and the card is on screen');
+  assert.match(menu.text, /SOUND/, 'with the sound in it');
+  await page.screenshot({ path: 'artifacts/world-pause.png' });
+
+  // A pause that lets the world run is not a pause.
+  const held = await page.evaluate(async () => {
+    const merc = window.merc;
+    const before = { x: merc.craft.x, z: merc.craft.z, y: merc.craft.y, fuel: merc.combat.fuel, armour: merc.combat.armour };
+    await new Promise(r => setTimeout(r, 1200));
+    return { moved: Math.hypot(merc.craft.x - before.x, merc.craft.y - before.y, merc.craft.z - before.z),
+      burned: before.fuel - merc.combat.fuel, hit: before.armour - merc.combat.armour };
+  });
+  assert.equal(held.moved, 0, `nothing moves while it is up: ${held.moved}`);
+  assert.equal(held.burned, 0, 'no fuel burns');
+  assert.equal(held.hit, 0, 'and nothing shoots at you');
+
+  // The brief opens on top of it and closing it puts you back in the menu; the yard is a
+  // panel rather than a pause, so it resumes.
+  await page.locator('#pause-brief').click();
+  assert.equal(await page.locator('#intro').isVisible(), true, 'the brief opens from the menu');
+  await page.locator('#intro-go').click();
+  assert.equal(await page.locator('#pause').isVisible(), true, 'and closing it leaves the menu up');
+  // Sound is in here too, and is remembered per browser rather than per seed.
+  const sound = await page.evaluate(() => {
+    const was = window.merc.sound();
+    document.getElementById('pause-mute').click();
+    const off = window.merc.sound();
+    document.getElementById('pause-mute').click();
+    return { was, off, back: window.merc.sound(), kept: JSON.parse(localStorage.getItem('merc.sound') ?? 'null') };
+  });
+  assert.equal(sound.off.enabled, false, 'the menu mutes the sound');
+  assert.equal(sound.back.enabled, true, 'and unmutes it');
+  assert.ok(sound.kept, 'and remembers the choice in this browser');
+  await page.locator('#pause-resume').click();
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('#pause').isVisible(), false, 'RESUME closes it');
+  assert.equal((await state()).paused, false, 'and the world starts again');
+  evidence.measurements.pause = { documented: menu.keys.length, held };
+  record('ESC stops the world and opens a menu that holds every control, the sound and the brief');
 
   // ---------------------------------------------------------------- the backends
   // One renderer, two backends: WebGPU where the browser has it, WebGL 2 where it does not.
@@ -390,7 +473,7 @@ try {
     // The nose as it is at the instant of firing. Read after a longer burst it drifts,
     // because the nose is still easing towards a cursor that moves with the camera.
     const before = merc.state();
-    merc.simulate(0.1, { Space: true });
+    merc.simulate(0.1, { Enter: true });
     const live = merc.combat.projectiles.filter(p => !p.hostile);
     const shot = live[0];
     const length = shot ? Math.hypot(shot.vx, shot.vz) : 1;
@@ -406,6 +489,28 @@ try {
     'and not the direction of travel, or aiming would be decoration');
   evidence.measurements.dualStick = { headings, behind: agreement(behind.nose, behind.travel), across: agreement(across.nose, across.travel), rounds };
   record('Rounds go where the aircraft is pointing, not where it is flying');
+
+  // ---------------------------------------------------------------- two controls, not one
+  // SPACE was the collective and the trigger at the same time: taking off emptied the
+  // cannon into the sky, and there was no way to climb without shooting.
+  const split = await page.evaluate(() => {
+    const merc = window.merc;
+    merc.combat.hostiles.length = 0;
+    merc.combat.projectiles.length = 0;
+    const atSpace = merc.craft.y;
+    merc.simulate(1.2, { Space: true });
+    const onSpace = { shots: merc.combat.projectiles.filter(p => !p.hostile).length, climbed: merc.craft.y - atSpace };
+    merc.combat.projectiles.length = 0;
+    const atTrigger = merc.craft.y;
+    merc.simulate(1.2, { Enter: true });
+    return { onSpace, onTrigger: { shots: merc.combat.projectiles.filter(p => !p.hostile).length, climbed: merc.craft.y - atTrigger } };
+  });
+  assert.equal(split.onSpace.shots, 0, 'the collective does not fire the gun');
+  assert.ok(split.onSpace.climbed > 2, `and it climbs: ${split.onSpace.climbed.toFixed(1)} units`);
+  assert.ok(split.onTrigger.shots > 0, `the trigger fires: ${split.onTrigger.shots} rounds`);
+  assert.ok(split.onTrigger.climbed < 1.5, `and does not climb: ${split.onTrigger.climbed.toFixed(1)} units`);
+  evidence.measurements.controls = split;
+  record('Ascend and fire are two separate controls, not one key doing both jobs');
 
   // ---------------------------------------------------------------- landing and on foot
   // Putting it down anywhere, and getting out of it. The flight model used to floor the
@@ -462,12 +567,16 @@ try {
   const running = await state();
   await page.keyboard.up('Shift');
   await page.keyboard.up('w');
-  assert.ok(walking.pilot.speedKmh >= 5 && walking.pilot.speedKmh <= 9,
-    `a walk is ${walking.pilot.speedKmh} km/h`);
-  assert.ok(running.pilot.speedKmh > walking.pilot.speedKmh + 6,
+  // Deliberately not a human pace: a real walk across a yard eighty metres wide at this
+  // camera height reads as standing still. What has to hold is that it is at least five
+  // times one, that running is worth doing, and that the panel reports the pilot rather
+  // than the parked aircraft.
+  assert.ok(walking.pilot.speedKmh >= 30,
+    `a walk is ${walking.pilot.speedKmh} km/h, well clear of a human one`);
+  assert.ok(running.pilot.speedKmh > walking.pilot.speedKmh + 20,
     `a run is faster: ${running.pilot.speedKmh} against ${walking.pilot.speedKmh} km/h`);
-  assert.ok(running.pilot.speedKmh <= 22, 'and is still a person, not a vehicle');
-  record('The pilot walks and runs at human speeds, and the panel reports theirs, not the aircraft');
+  assert.ok(running.pilot.speedKmh <= 130, 'and is still slower than the aircraft by a long way');
+  record('The pilot walks and runs fast enough to cross the yard, and the panel reports theirs');
 
   // Out of reach of the aircraft, boarding is refused; back at it, it is not.
   await page.keyboard.down('w');

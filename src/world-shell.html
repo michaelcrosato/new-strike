@@ -95,8 +95,6 @@
     .yard-grid li span{display:flex;justify-content:space-between;gap:10px;margin-top:4px}
     .yard-grid li em{font-style:normal;color:var(--amber)}
     .close{position:absolute;right:22px;top:16px;background:none;border:0;color:var(--paper);font-size:26px;cursor:pointer}
-    .keys{position:fixed;right:26px;bottom:26px;z-index:10;text-align:right;font-size:8px;letter-spacing:1.4px;color:var(--muted);line-height:2}
-    .keys kbd{border:1px solid var(--line);padding:2px 5px;margin-right:5px;color:var(--paper);font:inherit;border-radius:2px}
     #map-panel{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;
       background:#0f2523d9;backdrop-filter:blur(8px)}
     .map-card{background:linear-gradient(150deg,#22392fF2,#16292488);border:1px solid var(--line);padding:26px;
@@ -130,8 +128,19 @@
       z-index:16;width:min(620px,calc(100vw - 48px));background:rgba(14,30,27,.92);
       border:1px solid var(--line);border-left:2px solid var(--amber);padding:14px 18px 12px;
       backdrop-filter:blur(6px)}
-    #teach p{margin:0 0 8px;font-size:13px;line-height:1.55;color:#e6ecd9}
-    #teach div{display:flex;justify-content:space-between;align-items:center;gap:14px}
+    .teach-body{display:flex;align-items:center;gap:16px}
+    .teach-words{flex:1;min-width:0}
+    .teach-key{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;
+      padding-right:16px;border-right:1px solid var(--line)}
+    .teach-key small{font-size:7px;letter-spacing:1.8px;color:var(--muted)}
+    #teach-key{display:block;border:2px solid var(--amber);border-radius:3px;
+      padding:8px 14px;color:var(--paper);font-family:"Barlow Condensed",Impact,sans-serif;
+      font-size:31px;line-height:1;letter-spacing:1.5px;background:#2a3f3480;
+      animation:teach-pulse 1.5s ease-in-out infinite}
+    @keyframes teach-pulse{0%,100%{box-shadow:0 0 0 0 #f3b25e00}50%{box-shadow:0 0 0 5px #f3b25e26}}
+    @media (prefers-reduced-motion:reduce){#teach-key{animation:none}}
+    #teach p{margin:0 0 8px;font-size:14px;line-height:1.55;color:#e6ecd9}
+    .teach-foot{display:flex;justify-content:space-between;align-items:center;gap:14px}
     #teach span{font-size:8px;letter-spacing:1.6px;color:var(--amber);text-transform:uppercase}
     #teach button{background:none;border:1px solid var(--line);color:var(--muted);
       font:inherit;font-size:7px;letter-spacing:1.6px;padding:4px 9px;cursor:pointer}
@@ -182,13 +191,39 @@
       border:1px solid var(--amber);font:inherit;font-size:10px;letter-spacing:2.6px;cursor:pointer}
     #intro-go:hover{background:#4d5840}
 
+    /* ---------------------------------------------------------------- the pause menu */
+    #pause{position:fixed;inset:0;z-index:38;display:flex;align-items:center;justify-content:center;
+      background:#0d1f1de8;backdrop-filter:blur(9px);padding:24px}
+    .pause-card{width:900px}
+    .pause-state{color:var(--amber)!important;font-size:10px!important;letter-spacing:1.6px;
+      margin:14px 0 4px!important}
+    .pause-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:4px}
+    .keylist{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:0 0 4px;
+      align-items:baseline}
+    .keylist dt{text-align:right;white-space:nowrap}
+    .keylist dd{margin:0;font-size:10px;line-height:1.5;color:#b6c7ad}
+    .pause-sound{display:flex;align-items:center;gap:14px;margin:2px 0 4px}
+    .pause-sound button{background:none;border:1px solid var(--line);color:var(--paper);
+      font:inherit;font-size:8px;letter-spacing:1.6px;padding:9px 13px;cursor:pointer;flex:0 0 auto}
+    .pause-sound button:hover{border-color:var(--amber)}
+    .pause-sound input{flex:1;accent-color:var(--amber);min-width:90px}
+    .pause-actions{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-top:22px}
+    .pause-actions button{padding:13px 8px;background:none;color:var(--paper);
+      border:1px solid var(--line);font:inherit;font-size:9px;letter-spacing:2.2px;cursor:pointer}
+    .pause-actions button:hover{background:#2a3f34;border-color:var(--amber)}
+    #pause-resume{background:#3f4833;border-color:var(--amber);letter-spacing:2.6px}
+    #pause-resume:hover{background:#4d5840}
+    #pause-skip{grid-column:1 / -1}
+    .pause-note{display:block;margin-top:12px;font-size:8px;letter-spacing:1.4px;color:var(--muted)}
+
     /* ---------------------------------------------------------------- thumb controls */
     /* On a desktop these are dead weight, so they only exist for a coarse pointer. The
-       key legend is the reverse: useless to a thumb, so it goes the other way. */
+       key lists in the pause menu are the reverse: useless to a thumb, so they go the
+       other way, and the thumb blocks take their place in the same panel. */
     .rail,#touch-controls,.for-thumbs{display:none}
     body.touch .rail{display:flex}
     body.touch #touch-controls{display:block}
-    body.touch .keys,body.touch .for-keys{display:none}
+    body.touch .for-keys{display:none}
     body.touch .for-thumbs{display:block}
     .for-thumbs b{color:var(--paper);font-weight:600}
     /* A tablet keeps the desktop panels but gains the rail, so the board moves to clear it. */
@@ -273,6 +308,8 @@
          them, and takes the whole width of the band to stay short. */
       body.touch #teach{bottom:calc(286px + env(safe-area-inset-bottom));width:calc(100vw - 24px)}
       body.touch #teach p{font-size:12px;margin-bottom:7px}
+      body.touch #teach-key{font-size:24px;padding:6px 10px}
+      body.touch .teach-key{padding-right:12px}
       /* Centred, the flash landed on top of the mission line in the HUD. Below both panels
          and above the thumbs there is a clear band the width of the screen. */
       #flash{left:12px;right:12px;top:auto;bottom:calc(210px + env(safe-area-inset-bottom));
@@ -282,6 +319,15 @@
       .yard-card h2{font-size:29px}
       .yard-card p{font-size:10px;margin:8px 0 14px}
       .yard-grid{grid-template-columns:1fr;gap:14px}
+      #pause{padding:0}
+      /* A 24px button is a cursor's target, not a thumb's. */
+      .pause-sound button{padding:13px 15px;font-size:9px}
+      .pause-sound input{height:26px}
+      .pause-card{width:100%;height:100%;max-height:100%;padding:18px 16px calc(14px + env(safe-area-inset-bottom))}
+      .pause-grid{grid-template-columns:1fr;gap:16px}
+      .pause-actions{grid-template-columns:1fr 1fr;gap:8px}
+      #pause-resume{grid-column:1 / -1}
+      .keylist dd{font-size:9px}
       .intro-card{padding:18px 16px calc(14px + env(safe-area-inset-bottom))}
       .intro-card h2{font-size:31px}
       .intro-card header{gap:12px}
@@ -436,6 +482,7 @@
     <button id="rail-stance" aria-label="Land, get out, or climb back in">LAND</button>
     <button id="rail-home" aria-label="Return to your own pad">HOME</button>
     <button id="rail-panels" aria-label="Show flight telemetry">DATA</button>
+    <button id="rail-menu" aria-label="Pause and open the menu">MENU</button>
   </nav>
 
   <!-- Left thumb flies, right thumb fights. Pushed to the rim the stick is the throttle. -->
@@ -454,18 +501,8 @@
     </div>
   </div>
 
-  <div class="keys">
-    <div><kbd>W A S D</kbd>fly</div>
-    <div><kbd>MOUSE</kbd>or<kbd>ARROWS</kbd>aim</div>
-    <div><kbd>SHIFT</kbd>run up the throttle</div>
-    <div><kbd>SPACE</kbd>climb <kbd>C</kbd>descend to land</div>
-    <div><kbd>Q</kbd>get out / climb back in</div>
-    <div><kbd>/</kbd>the brief <kbd>ESC</kbd>close</div>
-    <div><kbd>SPACE</kbd>fire <kbd>E</kbd>winch / scan <kbd>F</kbd>flares</div>
-    <div><kbd>1 2 3</kbd>weapons <kbd>B</kbd>the yard</div>
-    <div><kbd>WHEEL</kbd>or<kbd>- =</kbd>zoom <kbd>0</kbd>reset</div>
-    <div><kbd>M</kbd>region map <kbd>H</kbd>home <kbd>G</kbd>hide panels</div>
-  </div>
+  <!-- The key legend used to live here, pinned over the game for ever. It is in the pause
+       menu now: you read it once, and a permanent card in the corner is clutter. -->
 
   <section id="map-panel" hidden>
     <div class="map-card">
@@ -510,28 +547,6 @@
           <ul id="intro-areas"></ul>
         </div>
         <div>
-          <h3>THE AIRCRAFT</h3>
-          <div class="for-keys">
-            <p><kbd>W A S D</kbd> fly · <kbd>MOUSE</kbd> or <kbd>ARROWS</kbd> aim · <kbd>SHIFT</kbd> throttle ·
-            <kbd>SPACE</kbd> climb · <kbd>C</kbd> descend to land · <kbd>Q</kbd> get out and walk</p>
-            <p><kbd>SPACE</kbd> fire · <kbd>E</kbd> winch, scan or mark · <kbd>F</kbd> flares · <kbd>1 2 3</kbd> weapons</p>
-            <p><kbd>B</kbd> the yard · <kbd>M</kbd> the map · <kbd>H</kbd> back to the pad · <kbd>G</kbd> hide the panels</p>
-            <p>Wheel or <kbd>-</kbd> <kbd>=</kbd> zoom, <kbd>0</kbd> back to the default view.</p>
-          </div>
-          <!-- A phone has no keyboard, and being told to press W A S D is no use to it. -->
-          <div class="for-thumbs">
-            <p>Left thumb flies. Push the stick to the rim and the throttle comes up with it.
-              <b>▲ ▼</b> climb and descend.</p>
-            <p>Right thumb points and shoots: hold <b>AIM · FIRE</b> to shoot, and slide it to
-              point the aircraft — you fly one way and face another. <b>WINCH</b> winches, scans
-              or marks, and <b>FLARE</b> throws countermeasures. Tap a weapon tile to change weapon.</p>
-            <p><b>LAND</b> sets the machine down where you are, and once it is down the same
-              button puts you out on foot. Walk with the left thumb; the button reads
-              <b>BOARD</b> when you are close enough to climb back in.</p>
-            <p>Down the right edge: the work, the map, the yard, and the way back to your pad.</p>
-            <p>Pinch the world to pull the camera back to eight times the view. The map pinches
-              and drags too, down to six hundred metres across.</p>
-          </div>
           <h3>THE WORK</h3>
           <p class="for-keys">Jobs are on the board, top right.</p>
           <p class="for-thumbs">Jobs are on the board, behind the WORK button.</p>
@@ -539,16 +554,111 @@
             and armour come back over your own pad and nowhere else.</p>
           <p>Every job moves somebody's opinion of you. You will not stay neutral, and you
             are not supposed to.</p>
+          <h3>THE CONTROLS</h3>
+          <p class="for-keys">All of them are in the pause menu, on <kbd>ESC</kbd>, along with
+            the sound. Nothing is pinned over the game.</p>
+          <p class="for-thumbs">All of them are in the pause menu, behind <b>MENU</b> on the
+            rail, along with the sound.</p>
         </div>
       </div>
       <button id="intro-go">TAKE THE FIRST JOB</button>
     </div>
   </section>
 
+  <!-- ESC, or MENU on the rail. The world stops — properly, not just held on station —
+       and this is where the controls live, because a legend pinned over the game is
+       something you read once and then look past for the rest of the session. -->
+  <section id="pause" hidden>
+    <div class="intro-card pause-card">
+      <header>
+        <h2>ON HOLD.</h2>
+        <small id="pause-where">—</small>
+      </header>
+      <p class="pause-state" id="pause-state">—</p>
+      <div class="pause-grid">
+        <div>
+          <h3 class="for-keys">THE AIRCRAFT</h3>
+          <dl class="keylist for-keys">
+            <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>fly, in screen directions</dd>
+            <dt><kbd>MOUSE</kbd><kbd>ARROWS</kbd></dt><dd>point the nose, wherever you are flying</dd>
+            <dt><kbd>SHIFT</kbd></dt><dd>run the throttle up</dd>
+            <dt><kbd>SPACE</kbd></dt><dd>the collective: lift off, and climb</dd>
+            <dt><kbd>C</kbd></dt><dd>descend, and hold it to set down</dd>
+            <dt><kbd>LEFT MOUSE</kbd><kbd>ENTER</kbd></dt><dd>fire the weapon you have selected</dd>
+            <dt><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></dt><dd>choose the weapon</dd>
+            <dt><kbd>E</kbd></dt><dd>hold to winch, scan or mark</dd>
+            <dt><kbd>F</kbd></dt><dd>countermeasure flares</dd>
+          </dl>
+          <h3 class="for-keys">ON FOOT</h3>
+          <dl class="keylist for-keys">
+            <dt><kbd>Q</kbd></dt><dd>get out where you are parked, and climb back in</dd>
+            <dt><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dt><dd>walk, with <kbd>SHIFT</kbd> to run</dd>
+          </dl>
+          <!-- A phone has no keyboard, and being told to press W A S D is no use to it. -->
+          <div class="for-thumbs">
+            <h3>THE THUMBS</h3>
+            <p>Left thumb flies. Push the stick to the rim and the throttle comes up with it.
+              <b>▲ ▼</b> climb and descend — separate buttons from the trigger.</p>
+            <p>Right thumb points and shoots: hold <b>AIM · FIRE</b> to shoot, and slide it to
+              point the aircraft — you fly one way and face another. <b>WINCH</b> winches, scans
+              or marks, and <b>FLARE</b> throws countermeasures. Tap a weapon tile to change weapon.</p>
+            <p><b>LAND</b> sets the machine down where you are, and once it is down the same
+              button puts you out on foot. Walk with the left thumb; the button reads
+              <b>BOARD</b> when you are close enough to climb back in.</p>
+          </div>
+        </div>
+        <div>
+          <h3 class="for-keys">THE WORLD</h3>
+          <dl class="keylist for-keys">
+            <dt><kbd>M</kbd></dt><dd>the region map — drag to pan, and <kbd>-</kbd><kbd>=</kbd> zoom it</dd>
+            <dt><kbd>B</kbd></dt><dd>the yard: fittings, crew and what they cost</dd>
+            <dt><kbd>H</kbd></dt><dd>back to your own pad, wherever you are</dd>
+            <dt><kbd>WHEEL</kbd><kbd>-</kbd><kbd>=</kbd></dt><dd>zoom out to eight times the view</dd>
+            <dt><kbd>0</kbd></dt><dd>back to the default view</dd>
+            <dt><kbd>G</kbd></dt><dd>hide the panels</dd>
+            <dt><kbd>/</kbd></dt><dd>the brief: this region, and how the work pays</dd>
+            <dt><kbd>ESC</kbd></dt><dd>this menu, and close whatever is open</dd>
+          </dl>
+          <div class="for-thumbs">
+            <h3>THE RAIL</h3>
+            <p>Down the right edge: the work, the map, the yard, landing and getting out, the
+              way back to your pad, the telemetry, and this menu.</p>
+            <p>Pinch the world to pull the camera back to eight times the view. The map pinches
+              and drags too, down to six hundred metres across.</p>
+          </div>
+          <h3>SOUND</h3>
+          <div class="pause-sound">
+            <button id="pause-mute">SOUND ON</button>
+            <input id="pause-volume" type="range" min="0" max="100" value="65" aria-label="Volume">
+          </div>
+          <h3>THE JOB</h3>
+          <p id="pause-job">—</p>
+        </div>
+      </div>
+      <div class="pause-actions">
+        <button id="pause-resume">RESUME</button>
+        <button id="pause-brief">THE BRIEF</button>
+        <button id="pause-yard">THE YARD</button>
+        <button id="pause-skip" hidden>SKIP THE TEACHING</button>
+      </div>
+      <small class="pause-note" id="pause-note">—</small>
+    </div>
+  </section>
+
   <!-- One sentence at a time. Sits low so it never covers the machine or the panels. -->
   <section id="teach" hidden>
-    <p id="teach-say">—</p>
-    <div><span id="teach-hint">—</span><button id="teach-skip">SKIP</button></div>
+    <div class="teach-body">
+      <!-- The key to press, big enough to read across the room, because the one thing the
+           opening must not do is leave a player stuck outside the aircraft. -->
+      <div class="teach-key" id="teach-press" hidden>
+        <small id="teach-verb">PRESS</small>
+        <kbd id="teach-key">Q</kbd>
+      </div>
+      <div class="teach-words">
+        <p id="teach-say">—</p>
+        <div class="teach-foot"><span id="teach-hint">—</span><button id="teach-skip">SKIP</button></div>
+      </div>
+    </div>
   </section>
 
   <div id="flash" hidden></div>

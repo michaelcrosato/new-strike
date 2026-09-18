@@ -99,14 +99,22 @@ test('the parked airframe sits on its skids, below the hover it lifts off to', (
 });
 
 // ---------------------------------------------------------------- on foot
-test('a pilot moves at human speeds, not helicopter ones', () => {
-  assert.ok(FOOT.walkKmh >= 4 && FOOT.walkKmh <= 8, `a walk is ${FOOT.walkKmh} km/h`);
-  assert.ok(FOOT.runKmh >= 12 && FOOT.runKmh <= 24, `a run is ${FOOT.runKmh} km/h`);
+test('a pilot on foot moves at a playable pace, well clear of a human one', () => {
+  // Deliberately not a human pace. At this camera height and this map scale a real walk
+  // reads as standing still, so the floor here is five times one: 35 km/h, and the walk is
+  // above it. What still has to hold is that being on foot is a different thing from
+  // flying — slower than the aircraft by an order of magnitude, and a run worth breaking
+  // into.
+  assert.ok(FOOT.walkKmh >= 35, `a walk is ${FOOT.walkKmh} km/h, at least five times a human one`);
+  assert.ok(FOOT.runKmh >= 100, `a run is ${FOOT.runKmh} km/h`);
   assert.ok(RUN > WALK * 1.5, 'running is worth doing');
-  assert.ok(RUN < CRUISE * 0.1, 'and is nothing like flying');
+  assert.ok(RUN < CRUISE * 0.5, 'and is still nothing like flying');
   // Crossing a settlement on foot should be a walk, not an expedition.
   const acrossVillage = 150 / (FOOT.runKmh / 3.6);
-  assert.ok(acrossVillage < 40, `crossing 150 m at a run takes ${acrossVillage.toFixed(0)} s`);
+  assert.ok(acrossVillage < 8, `crossing 150 m at a run takes ${acrossVillage.toFixed(1)} s`);
+  // And the yard itself, which is the first thing the game asks you to walk across.
+  const acrossYard = 80 / (FOOT.walkKmh / 3.6);
+  assert.ok(acrossYard < 8, `crossing the yard at a walk takes ${acrossYard.toFixed(1)} s`);
 });
 
 test('walking moves the pilot and settles at the right pace', () => {
