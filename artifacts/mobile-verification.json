@@ -1,7 +1,9 @@
 {
   "checks": [
     "The built bundle boots and renders at 390x844 (portrait)",
-    "The briefing fits the screen and a tap gets past it (portrait)",
+    "The opening sentence is on screen and clear of the thumb controls (portrait)",
+    "A thumb can skip the teaching and take the aircraft up (portrait)",
+    "The briefing is reached from the yard, fits the screen, and a tap gets past it (portrait)",
     "No panel hangs off the edge of the screen and the page does not scroll (portrait)",
     "The heads-up chrome leaves most of the world visible: 15% covered (portrait)",
     "A thumb on the flight stick flies the aircraft, and releasing it centres (portrait)",
@@ -18,7 +20,9 @@
     "The rail button returns the aircraft to its own pad (portrait)",
     "The rail lands the aircraft, puts the pilot out, and the stick walks them (portrait)",
     "The built bundle boots and renders at 844x390 (landscape)",
-    "The briefing fits the screen and a tap gets past it (landscape)",
+    "The opening sentence is on screen and clear of the thumb controls (landscape)",
+    "A thumb can skip the teaching and take the aircraft up (landscape)",
+    "The briefing is reached from the yard, fits the screen, and a tap gets past it (landscape)",
     "No panel hangs off the edge of the screen and the page does not scroll (landscape)",
     "The heads-up chrome leaves most of the world visible: 22% covered (landscape)",
     "A thumb on the flight stick flies the aircraft, and releasing it centres (landscape)",
@@ -45,7 +49,7 @@
         "position": {
           "x": 12,
           "z": -23,
-          "y": 26.75468429132233
+          "y": 14.45468429132233
         },
         "sample": {
           "x": 12,
@@ -66,8 +70,8 @@
         "pending": 0,
         "meshes": 108,
         "triangles": 47224,
-        "draw": 76,
-        "drawn": 36863,
+        "draw": 89,
+        "drawn": 33295,
         "backend": "WebGPU",
         "webgpu": true,
         "speedKmh": 0,
@@ -82,18 +86,21 @@
         "yaw": 0,
         "aim": 0,
         "aiming": false,
-        "stance": "flying",
+        "stance": "afoot",
         "pilot": {
-          "x": 12,
+          "x": 17,
           "z": -23,
-          "y": 12.75,
+          "y": 12.28,
           "speedKmh": 0,
-          "visible": false
+          "visible": true
         },
-        "toAircraft": 0,
-        "rotor": 1,
-        "tint": "#fffbf1",
-        "tintAmount": 0.123,
+        "toAircraft": 5,
+        "rotor": 0.551,
+        "teaching": "yard",
+        "teachingDone": false,
+        "mapOpened": false,
+        "tint": "#fffaed",
+        "tintAmount": 0.154,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
@@ -111,17 +118,23 @@
         "fog": 0.00092,
         "cable": 0,
         "projectiles": 0,
-        "intro": true,
+        "intro": false,
         "zoom": 1,
         "zoomStep": 1,
-        "viewAcross": 48,
+        "viewAcross": 20,
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 90.1
+          "ms": 79.1
         },
         "mapMs": 0,
-        "cameraClearance": 156.6
+        "cameraClearance": 155.9
+      },
+      "teaching": {
+        "top": 468,
+        "bottom": 558,
+        "left": 12,
+        "right": 378
       },
       "fit": {
         "problems": [],
@@ -155,6 +168,12 @@
             "y": 62,
             "w": 52,
             "h": 193
+          },
+          "#flash": {
+            "x": 12,
+            "y": 619,
+            "w": 366,
+            "h": 15
           }
         },
         "scrollWidth": 390,
@@ -165,7 +184,7 @@
       "travelled": 8.9,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 10
+        "cablePaid": 10.01
       },
       "aimStick": {
         "up": 1,
@@ -210,7 +229,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 230,
+          "ms": 172,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -229,7 +248,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 231,
+          "ms": 158,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -248,7 +267,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 231,
+          "ms": 158,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -269,7 +288,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 231,
+          "ms": 158,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -288,7 +307,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 231,
+          "ms": 158,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -307,7 +326,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 146,
+          "ms": 119,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -332,7 +351,7 @@
         "position": {
           "x": 12,
           "z": -23,
-          "y": 26.75468429132233
+          "y": 14.45468429132233
         },
         "sample": {
           "x": 12,
@@ -353,8 +372,8 @@
         "pending": 0,
         "meshes": 108,
         "triangles": 47224,
-        "draw": 85,
-        "drawn": 43995,
+        "draw": 92,
+        "drawn": 36651,
         "backend": "WebGPU",
         "webgpu": true,
         "speedKmh": 0,
@@ -369,23 +388,26 @@
         "yaw": 0,
         "aim": 0,
         "aiming": false,
-        "stance": "flying",
+        "stance": "afoot",
         "pilot": {
-          "x": 12,
+          "x": 17,
           "z": -23,
-          "y": 12.75,
+          "y": 12.28,
           "speedKmh": 0,
-          "visible": false
+          "visible": true
         },
-        "toAircraft": 0,
-        "rotor": 1,
+        "toAircraft": 5,
+        "rotor": 0.547,
+        "teaching": "yard",
+        "teachingDone": false,
+        "mapOpened": false,
         "tint": "#fffaed",
-        "tintAmount": 0.153,
+        "tintAmount": 0.155,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
         "fps": 94,
-        "streamMs": 0.04,
+        "streamMs": 0.03,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -398,17 +420,23 @@
         "fog": 0.00092,
         "cable": 0,
         "projectiles": 0,
-        "intro": true,
+        "intro": false,
         "zoom": 1,
         "zoomStep": 1,
-        "viewAcross": 225,
+        "viewAcross": 95,
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 77
+          "ms": 77.5
         },
         "mapMs": 0,
-        "cameraClearance": 156.6
+        "cameraClearance": 155.9
+      },
+      "teaching": {
+        "top": 209,
+        "bottom": 294,
+        "left": 210,
+        "right": 634
       },
       "fit": {
         "problems": [],
@@ -442,6 +470,12 @@
             "y": 46,
             "w": 52,
             "h": 152
+          },
+          "#flash": {
+            "x": 381,
+            "y": 62,
+            "w": 82,
+            "h": 13
           }
         },
         "scrollWidth": 844,
@@ -449,10 +483,10 @@
         "vh": 390
       },
       "coveredPercent": 22,
-      "travelled": 8.9,
+      "travelled": 8.8,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 9.64
+        "cablePaid": 10.01
       },
       "aimStick": {
         "up": 1,
@@ -497,7 +531,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 160,
+          "ms": 155,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -516,7 +550,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 158,
+          "ms": 168,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -535,7 +569,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 158,
+          "ms": 168,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -556,7 +590,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 158,
+          "ms": 168,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -575,7 +609,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 158,
+          "ms": 168,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -594,7 +628,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 95,
+          "ms": 155,
           "size": 709,
           "redraws": 3,
           "settled": false

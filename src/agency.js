@@ -241,6 +241,44 @@ export function generateContracts(world, profile, { day = profile.day, count = n
   return out;
 }
 
+/**
+ * The job you start with, already assigned.
+ *
+ * A crate to the nearest settlement: the simplest kind there is, close enough that the whole
+ * first minute fits inside it, and built with the same fields the board builds so that
+ * accepting it, flying it and settling it all go through exactly the same code. Nothing about
+ * the contract board has to be explained before the player has done one.
+ */
+export function openingContract(world, profile) {
+  const home = world.home;
+  const site = world.settlementsNear(home.x, home.z, 900)
+    .filter(candidate => Math.hypot(candidate.x - home.x, candidate.z - home.z) > 45)
+    .sort((a, b) => Math.hypot(a.x - home.x, a.z - home.z) - Math.hypot(b.x - home.x, b.z - home.z))[0];
+  if (!site) return null;
+  const kind = contractKind('delivery');
+  // Whoever holds the ground is the one who wants the crate moved.
+  const issuer = FACTIONS[site.faction] ?? FACTIONS[0];
+  const distance = Math.hypot(site.x - home.x, site.z - home.z);
+  const distanceKm = distance * WORLD.metresPerUnit / 1000;
+  return {
+    id: 'c0_first', kind: kind.key, kindName: kind.name,
+    issuer: issuer.key, issuerName: issuer.name,
+    site: { id: site.id, name: site.name, x: site.x, z: site.z, kind: site.kind, kindName: site.kindName,
+      faction: site.faction, radius: site.radius, threat: site.threat, height: site.height,
+      landmark: false, region: site.region, regionName: site.regionName },
+    targetFaction: issuer.key,
+    hostile: false,
+    distance, distanceKm: +distanceKm.toFixed(2), risk: 1,
+    pay: Math.round((kind.basePay + distanceKm * 210) / 10) * 10,
+    title: `${kind.verb} ${site.name}`,
+    brief: 'A crate, a pad, and nobody shooting. Start here.',
+    complication: null,
+    deltas: standingDeltas(issuer.key, issuer.key, kind),
+    expiresDay: profile.day + 9,
+    opening: true,
+  };
+}
+
 // What finishing a job does to the region's opinion of you.
 export function standingDeltas(issuerKey, targetKey, kind) {
   const deltas = {};

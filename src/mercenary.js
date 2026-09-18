@@ -10,12 +10,14 @@ import { createRenderer, createPost, createSeaMaterial, backendName, frameDrawCa
 import { LOOK, REGION_GRADE, GRADE_STRENGTH } from './look.js';
 import { FLIGHT, CRUISE, TOP, unitsToKmh } from './flight.js';
 import { LANDING, FOOT, WALK, landingCheck, slowEnoughToLand, stepWalk, stepOutSpot, canBoard } from './crew.js';
+import { buildYard } from './yard.js';
+import { createTutorial, stepTutorial, skipTutorial, tutorialStep } from './tutorial.js';
 import { createWorld, WORLD, BIOMES, FACTIONS } from './worldgen.js';
 import { ChunkStreamer, desiredChunks } from './streaming.js';
 import { buildChunk, createMaterials } from './terrain.js';
 import { buildOverview, OVERVIEW_RESOLUTION } from './overview.js';
 import { createProfile, generateContracts, accept, resolve, endDay, standingBand, situation,
-  purchase, hire, UPGRADES, HIREABLE, applyStanding } from './agency.js';
+  purchase, hire, UPGRADES, HIREABLE, applyStanding, openingContract } from './agency.js';
 import { createCombat, rearm, syncHostiles, stepCombat, availableWeapons, combatStandingDeltas,
   WEAPONS, hitCraft } from './combat.js';
 import { startMission, stepMission, missionStatus, clearMission } from './missions.js';
@@ -219,6 +221,15 @@ function buildPilot() {
 const figure = buildPilot();
 scene.add(figure.group);
 
+// The yard itself, which was an empty field until now. Built from the profile, so the
+// fittings you buy in the yard screen appear in the yard you are standing in.
+let yard = null;
+function rebuildYard() {
+  yard?.dispose();
+  yard = buildYard(world, profile, materials.built);
+  scene.add(yard.mesh);
+}
+
 // ---------------------------------------------------------------- streaming
 const materials = createMaterials();
 let residentTriangles = 0, residentMeshes = 0;
@@ -273,7 +284,7 @@ function renderYard() {
       onTap(item, () => {
         const result = purchase(profile, item.dataset.upgrade);
         flash(result.ok ? 'FITTED' : result.reason);
-        if (result.ok) { rearm(combat, profile); renderWeapons(); saveProfile(); }
+        if (result.ok) { rearm(combat, profile); renderWeapons(); saveProfile(); rebuildYard(); }
         renderYard(); renderOutfit();
       });
     }
@@ -335,6 +346,8 @@ function showIntro() {
   $('intro').hidden = false;
 }
 // Still reachable with .click(), which is how the keyboard and the harness dismiss it.
+onTap($('yard-brief'), () => { toggleYard(); showIntro(); });
+onTap($('teach-skip'), () => abandonTeaching());
 onTap($('intro-go'), () => {
   if ($('intro').hidden) return;
   $('intro').hidden = true;
@@ -461,7 +474,7 @@ function updateActive(dt) {
   for (const event of mission.events) {
     if (event.type === 'aboard') flash(event.remaining ? `ABOARD · ${event.remaining} TO GO` : 'ALL ABOARD');
     if (event.type === 'scanned') flash('SCAN COMPLETE');
-    if (event.type === 'dropped') flash('CARGO DOWN');
+    if (event.type === 'dropped') { flash('CARGO DOWN'); cargoLatched = true; }
     if (event.type === 'waypoint') flash(event.left ? `WAYPOINT · ${event.left} LEFT` : 'SWEEP COMPLETE');
     if (event.type === 'convoyArrived') flash('COLUMN IS IN');
     if (event.type === 'convoyLost') flash('COLUMN LOST');
@@ -677,7 +690,11 @@ addEventListener('keydown', e => {
     return;
   }
   keys.add(e.code);
-  if (e.code === 'Escape') { for (const id of ['yard', 'map-panel']) if (!$(id).hidden) $(id).hidden = true; }
+  if (e.code === 'Escape') {
+    if (!$('intro').hidden) $('intro').hidden = true;
+    else if (!abandonTeaching()) for (const id of ['yard', 'map-panel']) if (!$(id).hidden) $(id).hidden = true;
+  }
+  if (e.code === 'Slash') showIntro();
   // With the map open the same three keys work the map's zoom instead of the camera's,
   // which is the thing you are actually looking at.
   const mapping = !$('map-panel').hidden;
@@ -773,6 +790,11 @@ function climbOut() {
   pilot.vx = 0; pilot.vz = 0;
   pilot.yaw = craft.yaw; pilot.aim = craft.yaw;
   stance = 'afoot';
+  // Placed and shown here rather than waiting for the first walk step, so the very first
+  // rendered frame already has the pilot standing in the yard.
+  figure.group.visible = true;
+  figure.group.position.set(pilot.x, pilot.y, pilot.z);
+  figure.group.rotation.y = -pilot.yaw;
   updateCamera(0, true);
   audio.event({ type: 'objective' });
   flash('ON FOOT · Q AT THE AIRCRAFT TO GET BACK IN');
@@ -797,6 +819,63 @@ function climbIn() {
 }
 
 const toggleStance = () => (stance === 'afoot' ? climbIn() : climbOut());
+
+// ---------------------------------------------------------------- the first minute
+// One sentence at a time, each attached to something the player has to do. The script
+// itself lives in src/tutorial.js; this is the part that knows about the world.
+let teaching = null, mapOpened = false, cargoLatched = false;
+
+function tutorialSnapshot() {
+  return {
+    stance,
+    walked: pilot.stride,
+    airborne: craft.y - world.groundHeight(craft.x, craft.z),
+    flown: Math.hypot(craft.x - home.x, craft.z - home.z),
+    mapOpened,
+    cargoDown: cargoLatched,
+    jobDone: profile.completed.length > 0,
+  };
+}
+
+function renderTeaching() {
+  const step = teaching && tutorialStep(teaching);
+  const panel = $('teach');
+  if (!panel) return;
+  panel.hidden = !step;
+  if (!step) return;
+  const subjectName = step.id === 'job'
+    ? (profile.active?.site.name ?? 'the drop')
+    : world.regionAt(craft.x, craft.z).name;
+  $('teach-say').textContent = step.say(subjectName);
+  $('teach-hint').textContent = step.hint;
+}
+
+// What each step needs set up when it begins.
+function onTeachStep(id) {
+  if (id === 'job' && !profile.active) {
+    const first = openingContract(world, profile);
+    if (first) {
+      board = [first, ...board.filter(c => c.id !== first.id)];
+      takeContract(first);
+    }
+  }
+  renderTeaching();
+}
+
+function updateTeaching(dt) {
+  if (!teaching) return;
+  for (const event of stepTutorial(teaching, tutorialSnapshot(), dt)) {
+    if (event.type === 'enter') onTeachStep(event.id);
+    if (event.type === 'finish') { renderTeaching(); flash('THAT IS THE JOB'); }
+  }
+}
+
+function abandonTeaching() {
+  if (!teaching || !skipTutorial(teaching)) return false;
+  renderTeaching();
+  flash('ON YOUR OWN');
+  return true;
+}
 
 // What state you are in, and what the control in front of you will do about it. The rail
 // button makes the same decision the Q key does, so a thumb and a keyboard read the same
@@ -1605,6 +1684,7 @@ function paintMap() {
 function toggleMap() {
   const panel = $('map-panel');
   panel.hidden = !panel.hidden;
+  if (!panel.hidden) mapOpened = true;
   if (panel.hidden) return;
   const resized = sizeMapCanvas();
   if (!mapDrawn || resized || !mapBaseMatches()) drawMap();
@@ -1888,6 +1968,7 @@ function frame(now) {
   updateMarker();
   updateWeather(dt);
   updateTone(dt);
+  updateTeaching(dt);
   audio.update(Math.hypot(craft.vx, craft.vz), 'playing');
 
   renderer.info.reset();
@@ -1950,7 +2031,18 @@ try {
   renderOutfit();
   renderWeapons();
   $('loading').hidden = true;
-  if (!returning) showIntro();
+  rebuildYard();
+  if (!returning) {
+    // A first run starts on foot in the yard, with the machine parked, and is talked
+    // through the first job a sentence at a time. The briefing card is still there — it is
+    // a reference now, opened from the yard or with / — rather than homework before you
+    // are allowed to play.
+    stance = 'landed';
+    craft.y = world.groundHeight(home.x, home.z) + LANDING.skidHeight;
+    climbOut();
+    teaching = createTutorial();
+    renderTeaching();
+  }
   requestAnimationFrame(frame);
   setTimeout(buildFarField, 0);
 } catch (error) {
@@ -1986,6 +2078,9 @@ window.merc = {
       speedKmh: Math.round(unitsToKmh(Math.hypot(pilot.vx, pilot.vz))), visible: figure.group.visible },
     toAircraft: +Math.hypot(pilot.x - craft.x, pilot.z - craft.z).toFixed(2),
     rotor: +rotorSpeed.toFixed(3),
+    teaching: teaching && tutorialStep(teaching) ? tutorialStep(teaching).id : null,
+    teachingDone: !!teaching?.finished,
+    mapOpened,
     tint: '#' + regionTint.getHexString(), tintAmount: +tintAt.toFixed(3),
     exposure: renderer.toneMappingExposure, sun: +sun.intensity.toFixed(2), hemi: +hemisphere.intensity.toFixed(2),
     fps: Math.round(fps), streamMs: +buildHitch.toFixed(2),
@@ -2010,6 +2105,10 @@ window.merc = {
   intro: () => { showIntro(); return true; },
   // Landing, and getting in and out, for the browser suite.
   land: (seconds = 6) => { landingAssist = performance.now() + seconds * 1000; return true; },
+  teachStep: () => (teaching && tutorialStep(teaching) ? tutorialStep(teaching).id : null),
+  teachSay: () => $('teach-say').textContent,
+  skipTeaching: () => abandonTeaching(),
+  yardTriangles: () => yard?.triangles ?? 0,
   stanceNow: () => stance,
   getOut: () => climbOut(),
   getIn: () => climbIn(),
@@ -2079,6 +2178,7 @@ window.merc = {
       updateMarker();
       updateWeather(step);
       updateTone(step);
+      updateTeaching(step);
       streamer.update(subject().x, subject().z);
     }
     keys.clear();

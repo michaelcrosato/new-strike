@@ -124,9 +124,58 @@ try {
     measurements.boot = booted;
     record(`The built bundle boots and renders at ${viewport.width}x${viewport.height} (${label})`);
 
+    // ---------------------------------------------------------------- the first minute
+    // A first run opens on foot in the yard with one sentence along the bottom of the screen.
+    // On a phone that is the hardest place to put anything, because the thumb controls are
+    // there too: the sentence has to be on screen and clear of them, or it is either off the
+    // bottom of the display or under a thumb.
+    const opening = await state();
+    assert.equal(opening.stance, 'afoot', `${label}: a first run starts on foot`);
+    assert.equal(opening.teaching, 'yard', `${label}: with the teaching on its first step`);
+    assert.equal(await page.locator('#teach').isVisible(), true, `${label}: and its first sentence on screen`);
+    const teachFits = await page.evaluate(() => {
+      const box = el => { const r = el.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; };
+      const r = box(document.getElementById('teach'));
+      // Every control a thumb lands on, plus the chrome that is always up: a sentence under
+      // the flight stick cannot be read, and one on top of the HUD cannot be read either.
+      const thumbed = '#joystick, #touch-climb, #touch-descend, #touch-flare, #touch-winch, #touch-fire, .rail, #hud, .topbar';
+      const clash = [...document.querySelectorAll(thumbed)]
+        .filter(el => el.offsetParent !== null)
+        .map(el => ({ id: el.id || el.textContent.trim(), ...box(el) }))
+        .filter(o => !(o.bottom <= r.top || o.top >= r.bottom || o.right <= r.left || o.left >= r.right));
+      return { inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, box: r, clash };
+    });
+    assert.equal(teachFits.inView, true,
+      `${label}: the sentence being taught is on screen without scrolling: ${JSON.stringify(teachFits.box)}`);
+    assert.deepEqual(teachFits.clash, [],
+      `${label}: and no control a thumb uses is on top of it: ${JSON.stringify(teachFits.clash)}`);
+    await page.screenshot({ path: `artifacts/mobile-${label}-opening.png` });
+    measurements.teaching = teachFits.box;
+    record(`The opening sentence is on screen and clear of the thumb controls (${label})`);
+
+    // SKIP is a real button for a thumb, and the rest of this suite flies rather than learns.
+    const skip = await centreOf(page, '#teach-skip');
+    await touch.tap(skip.x, skip.y);
+    await page.waitForTimeout(250);
+    assert.equal(await page.locator('#teach').isVisible(), false, `${label}: a tap on SKIP gets past the teaching`);
+    // Into the air, which is where every check after this one starts from.
+    await page.evaluate(() => { window.merc.getIn(); window.merc.simulate(4, { Space: true }); });
+    await page.waitForTimeout(250);
+    assert.equal((await state()).stance, 'flying', `${label}: and the aircraft can be taken up`);
+    record(`A thumb can skip the teaching and take the aircraft up (${label})`);
+
     // ---------------------------------------------------------------- the briefing
-    // The briefing is the first thing a player sees, and its single button is the only way
-    // past it. Off the bottom of a phone screen, the game looks like a wall of text.
+    // The briefing is a reference panel now, reached from the yard the same way a thumb
+    // reaches everything else. Its single button is still the only way out of it, so off the
+    // bottom of a phone screen it traps the player.
+    const yardButton = await centreOf(page, '#rail-yard');
+    await touch.tap(yardButton.x, yardButton.y);
+    await page.waitForTimeout(250);
+    assert.equal(await page.locator('#yard').isVisible(), true, `${label}: the yard opens on a tap`);
+    const briefButton = await centreOf(page, '#yard-brief');
+    await touch.tap(briefButton.x, briefButton.y);
+    await page.waitForTimeout(250);
+    assert.equal(await page.locator('#intro').isVisible(), true, `${label}: and THE BRIEF opens the briefing`);
     const introFits = await page.evaluate(() => {
       const r = document.getElementById('intro-go').getBoundingClientRect();
       return { inView: r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, top: Math.round(r.top), bottom: Math.round(r.bottom) };
@@ -137,7 +186,8 @@ try {
     await touch.tap(go.x, go.y);
     await page.waitForTimeout(250);
     assert.equal(await page.locator('#intro').isVisible(), false, `${label}: and a tap dismisses it`);
-    record(`The briefing fits the screen and a tap gets past it (${label})`);
+    await page.evaluate(() => { if (!document.getElementById('yard').hidden) window.merc.yard(); });
+    record(`The briefing is reached from the yard, fits the screen, and a tap gets past it (${label})`);
 
     // ---------------------------------------------------------------- the chrome fits
     const fit = await page.evaluate(() => {

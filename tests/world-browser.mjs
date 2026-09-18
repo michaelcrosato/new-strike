@@ -45,10 +45,85 @@ try {
   record('The built bundle boots, streams the first chunks and renders');
 
 
-  // ---------------------------------------------------------------- the briefing
-  assert.equal(await page.locator('#intro').isVisible(), true, 'a first visit gets a briefing');
-  const brief = await page.locator('#intro-quill').textContent();
+  // ---------------------------------------------------------------- the first minute
+  // A first run used to open with a wall of text and a button. It opens on foot in the yard
+  // now and teaches itself one sentence at a time. The script's order and dwell times are
+  // pinned in tests/tutorial.test.mjs; what is pinned here is the half that touches the
+  // world - that it starts where the player is, that there is a yard to stand in, and that
+  // the opening sentence names the region that was actually generated.
+  const opening = await state();
+  assert.equal(opening.stance, 'afoot', 'a first run starts on foot');
+  assert.equal(opening.pilot.visible, true, 'and the pilot is drawn on the very first frame');
+  assert.equal(opening.teaching, 'yard', 'with the teaching on its first step');
+  const yardTriangles = await page.evaluate(() => window.merc.yardTriangles());
+  assert.ok(yardTriangles > 300, `the yard is built to stand in: ${yardTriangles} triangles`);
+  assert.equal(await page.locator('#teach').isVisible(), true, 'the first sentence is on screen');
+  const first = await page.locator('#teach-say').textContent();
   const regionName = await page.evaluate(() => window.merc.world.regionAt(window.merc.world.home.x, window.merc.world.home.z).name);
+  assert.ok(first.includes(regionName), `the opening names the region generated: ${regionName} - "${first}"`);
+  assert.equal((first.match(/[.!?]/g) ?? []).length, 1, `one sentence at a time: "${first}"`);
+  await page.screenshot({ path: 'artifacts/world-opening.png' });
+  // A sentence printed on top of a panel cannot be read. The telemetry column and the key
+  // legend both live along the bottom of the screen, which is where a subtitle belongs, so
+  // this is checked at the width it was wrong at as well as at the suite's own.
+  const clashAt = async () => page.evaluate(() => {
+    // Spreading a DOMRect gives an empty object, because its edges are prototype getters.
+    const box = el => { const b = el.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, left: b.left, right: b.right }; };
+    const r = box(document.getElementById('teach'));
+    return [...document.querySelectorAll('#debug, .keys, #hud, .topbar, #outfit')]
+      .filter(el => getComputedStyle(el).display !== 'none')
+      .map(el => ({ what: el.id || el.className, ...box(el) }))
+      .filter(o => !(o.bottom <= r.top || o.top >= r.bottom || o.right <= r.left || o.left >= r.right))
+      .map(o => o.what);
+  });
+  assert.deepEqual(await clashAt(), [], 'the sentence is clear of the panels at 1440x900');
+  for (const size of [{ width: 1100, height: 700 }, { width: 978, height: 1231 }]) {
+    await page.setViewportSize(size);
+    await page.waitForTimeout(200);
+    assert.deepEqual(await clashAt(), [],
+      `and at ${size.width}x${size.height}, which is too narrow for it to sit between them`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(200);
+  evidence.measurements.opening = { stance: opening.stance, step: opening.teaching, yardTriangles, sentence: first };
+  record('A first run starts on foot in a yard that exists, and is taught one sentence at a time');
+
+  // Now played, at the simulation's own pace rather than in real time: walk, climb in, lift
+  // off, fly out. Sampled in half-second slices because a step that holds for a second would
+  // otherwise be stepped straight over without ever being seen.
+  const taught = [opening.teaching];
+  const advance = async (seconds, input) => {
+    for (let i = 0; i < seconds * 2; i++) {
+      await page.evaluate(held => window.merc.simulate(0.5, held), input);
+      const at = await page.evaluate(() => window.merc.teachStep());
+      if (at !== taught.at(-1)) taught.push(at);
+    }
+    return taught.at(-1);
+  };
+  await advance(6, { KeyW: true, ShiftLeft: true });        // away from the tents
+  await advance(6, { KeyW: true, ShiftLeft: true });
+  // Back to the machine, because boarding is refused from across the yard.
+  for (let i = 0; i < 10 && (await state()).toAircraft > 6; i++) await advance(2, { KeyS: true, ShiftLeft: true });
+  assert.equal(await page.evaluate(() => window.merc.getIn()), true, 'the pilot can climb in when told to');
+  await advance(2, {});
+  await advance(5, { Space: true });                        // the collective
+  await advance(6, { KeyW: true, ShiftLeft: true });        // out over the region
+  await advance(4, {});                                     // the job, put in hand on arrival
+  assert.deepEqual(taught, ['yard', 'trade', 'board', 'lift', 'fly', 'job', 'map'],
+    `the opening is taught in order: ${taught.join(' -> ')}`);
+  const handed = await outfit();
+  assert.ok(handed.active, 'the opening job is put in hand rather than left on the board');
+  assert.match(handed.active.title, /^Run cargo to /, `and it is a pick-up and drop-off: ${handed.active.title}`);
+  evidence.measurements.opening.taught = taught;
+  evidence.measurements.opening.job = handed.active.title;
+  record('The opening is taught in order and hands the pilot a delivery without a trip to the board');
+
+  // ---------------------------------------------------------------- the briefing
+  // Still there, and still about the world that was generated, but a reference panel opened
+  // on demand now rather than homework before you are allowed to play.
+  await page.keyboard.press('/');
+  assert.equal(await page.locator('#intro').isVisible(), true, 'the briefing opens on demand');
+  const brief = await page.locator('#intro-quill').textContent();
   // Quill says "parked in the LONG SAVANNA", so the article is lowercased in her copy.
   const spoken = regionName.replace(/^THE /, '');
   assert.ok(brief.includes(spoken), `Quill names the region you are parked in: ${regionName}`);
@@ -57,7 +132,13 @@ try {
   await page.screenshot({ path: 'artifacts/world-briefing.png' });
   await page.locator('#intro-go').click();
   assert.equal(await page.locator('#intro').isVisible(), false, 'and it dismisses');
-  record('The first-run briefing describes the region that was actually generated');
+  record('The briefing is a reference panel that still describes the region actually generated');
+
+  // Abandoned for the rest of the suite, which flies rather than learns.
+  assert.equal(await page.evaluate(() => window.merc.skipTeaching()), true, 'the teaching can be abandoned');
+  assert.equal(await page.evaluate(() => window.merc.teachStep()), null, 'and stops asking for anything');
+  assert.equal(await page.locator('#teach').isVisible(), false, 'and takes its panel with it');
+  record('The teaching can be abandoned by a player who would rather work it out themselves');
 
   // ---------------------------------------------------------------- the backends
   // One renderer, two backends: WebGPU where the browser has it, WebGL 2 where it does not.
@@ -77,7 +158,15 @@ try {
   await fallback.waitForFunction(() => window.merc && window.merc.state().resident > 20, null, { timeout: 30000 });
   const fallbackState = await fallback.evaluate(() => window.merc.state());
   assert.equal(fallbackState.backend, 'WebGL2', 'forcing the fallback gives the WebGL 2 backend');
-  await fallback.evaluate(() => { window.merc.dismiss(); window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z); });
+  // The fallback is a first run of its own: on foot, being taught. Both pictures have to be
+  // taken from the same place with the same camera, so it is put in the air first.
+  await fallback.evaluate(() => {
+    window.merc.dismiss();
+    window.merc.skipTeaching();
+    window.merc.getIn();
+    window.merc.simulate(4, { Space: true });
+    window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z);
+  });
   await fallback.waitForTimeout(400);
   const fallbackFrame = await measureFrame(fallback);
 

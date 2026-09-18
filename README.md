@@ -36,7 +36,16 @@ live. To play on a phone on the same Wi-Fi, open `http://<your-PC-LAN-address>:4
 **Dual-stick: the left hand flies and the right hand points.** `W A S D` fly · **the mouse or
 the arrow keys aim** · `SHIFT` throttle · `SPACE` climb · `C` descend · `SPACE` fire · `E`
 winch, scan or mark · `F` flares · `1 2 3` weapons · **wheel or `-` `=` zoom** · `0` reset the
-view · `B` the yard · `M` the region map · `H` back to the pad · `G` hide the panels.
+view · `Q` get out or climb back in · `B` the yard · `M` the region map · `H` back to the pad ·
+`G` hide the panels · `/` the brief.
+
+**The first minute teaches itself.** A first run starts you on foot in the yard — two tents, a
+scraped circle of dirt, some drums and a tarpaulin — and gives you one sentence at a time: you
+fly for money, that machine is everything you own, `SPACE` is the collective, `M` is the map.
+A delivery is already in your hands by the time the map is explained, because the first job is
+assigned rather than left on the board: fly to the ring, hold `E`, come home. Ten steps, about
+a minute, and `ESC` or SKIP abandons it. Quill's briefing on the region is still there as a
+reference panel, on `/` or THE BRIEF in the yard.
 
 Movement is screen-relative and independent of where the nose is, so the aircraft crabs and
 flies backwards the way a gunship fights — you can run from a checkpoint with the gun still on

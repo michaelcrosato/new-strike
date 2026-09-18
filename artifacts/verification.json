@@ -56,11 +56,11 @@
   },
   "mobile": {
     "landscape": {
-      "fps": 76,
+      "fps": 77,
       "quality": "mobile",
       "pixelRatio": 1.3,
       "drawCalls": 158,
-      "triangles": 49703,
+      "triangles": 49691,
       "ready": true,
       "touch": true
     }

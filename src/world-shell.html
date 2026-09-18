@@ -80,6 +80,10 @@
     .yard-card header{display:flex;justify-content:space-between;align-items:baseline;gap:30px}
     .yard-card h2{font-family:"Barlow Condensed",Impact,sans-serif;font-size:40px;margin:0}
     .yard-card small{font-size:9px;letter-spacing:2px;color:var(--amber)}
+    .yard-card header div{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
+    #yard-brief{background:none;border:1px solid var(--line);color:var(--muted);font:inherit;
+      font-size:7px;letter-spacing:1.6px;padding:4px 9px;cursor:pointer}
+    #yard-brief:hover{color:var(--paper);border-color:var(--amber)}
     .yard-card p{font-size:11px;line-height:1.7;color:#b6c7ad;margin:10px 0 22px;max-width:620px}
     .yard-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px}
     .yard-grid h3{font-size:9px;letter-spacing:2px;color:var(--amber);margin:0 0 12px;
@@ -122,6 +126,28 @@
     .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:14px;font-size:8px;letter-spacing:1.3px;color:var(--muted)}
     .legend i{display:inline-block;width:9px;height:9px;margin-right:5px;vertical-align:-1px}
     #map-close{position:absolute;right:28px;top:22px;background:none;border:0;color:var(--paper);font-size:26px;cursor:pointer}
+    #teach{position:fixed;left:50%;bottom:calc(30px + env(safe-area-inset-bottom));transform:translateX(-50%);
+      z-index:16;width:min(620px,calc(100vw - 48px));background:rgba(14,30,27,.92);
+      border:1px solid var(--line);border-left:2px solid var(--amber);padding:14px 18px 12px;
+      backdrop-filter:blur(6px)}
+    #teach p{margin:0 0 8px;font-size:13px;line-height:1.55;color:#e6ecd9}
+    #teach div{display:flex;justify-content:space-between;align-items:center;gap:14px}
+    #teach span{font-size:8px;letter-spacing:1.6px;color:var(--amber);text-transform:uppercase}
+    #teach button{background:none;border:1px solid var(--line);color:var(--muted);
+      font:inherit;font-size:7px;letter-spacing:1.6px;padding:4px 9px;cursor:pointer}
+    #teach button:hover{color:var(--paper);border-color:var(--amber)}
+    /* Measured at four window sizes. A 620px prompt centred on the screen only clears the
+       telemetry column (x 366) and the key legend (236px in from the right) above about
+       1350px of width. Between 1000 and 1350 it takes that gap itself and stays along the
+       bottom where a subtitle belongs; narrower than that the gap is too thin to read in, so
+       it goes above the telemetry instead. */
+    @media (min-width:1000px) and (max-width:1351px){
+      #teach{left:378px;right:248px;width:auto;max-width:620px;transform:none}
+    }
+    @media (min-width:421px) and (max-width:999px){
+      #teach{bottom:calc(360px + env(safe-area-inset-bottom))}
+    }
+    body.touch #teach{bottom:calc(232px + env(safe-area-inset-bottom));width:min(560px,calc(100vw - 48px))}
     #flash{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:12;font-size:11px;letter-spacing:2px;color:var(--amber);text-shadow:0 2px 8px #12261f;text-align:center;pointer-events:none}
     #loading{position:fixed;inset:0;z-index:100;background:#1c342d;display:flex;flex-direction:column;
       align-items:center;justify-content:center;gap:16px}
@@ -242,6 +268,11 @@
       .map-frame{width:100%;align-self:center}
       .legend{gap:7px 12px;margin-top:0;font-size:7px}
       #map-close{right:14px;top:10px}
+      /* The sentence being taught has to clear the thumbs as well as the panels: the lift
+         buttons begin 578px down a 844px screen, so it sits above them rather than under
+         them, and takes the whole width of the band to stay short. */
+      body.touch #teach{bottom:calc(286px + env(safe-area-inset-bottom));width:calc(100vw - 24px)}
+      body.touch #teach p{font-size:12px;margin-bottom:7px}
       /* Centred, the flash landed on top of the mission line in the HUD. Below both panels
          and above the thumbs there is a clear band the width of the screen. */
       #flash{left:12px;right:12px;top:auto;bottom:calc(210px + env(safe-area-inset-bottom));
@@ -280,6 +311,11 @@
       body.touch #outfit.open{transform:none}
       .rail{gap:4px;top:calc(46px + env(safe-area-inset-top))}
       .rail button{padding:6px 0;font-size:7px}
+      /* Sideways the stick is bottom left and the action buttons bottom right, with the lift
+         buttons in the middle from y 320 down, and the HUD reaching x 222 at the top left: a
+         narrow panel low in the middle is the one place clear of all four. */
+      body.touch #teach{bottom:calc(96px + env(safe-area-inset-bottom));width:min(424px,calc(100vw - 420px))}
+      body.touch #teach p{font-size:11px;line-height:1.5;margin-bottom:6px}
       /* Sideways the height is what runs out, so the map takes it and the words go beside. */
       #map-panel{padding:0}
       /* auto/1fr rows, or the tall map spanning both rows shares its height out between
@@ -382,7 +418,7 @@
   <section id="yard" hidden>
     <div class="yard-card">
       <button id="yard-close" class="close" aria-label="Close">×</button>
-      <header><h2>THE YARD.</h2><small id="yard-cash">—</small></header>
+      <header><h2>THE YARD.</h2><div><button id="yard-brief">THE BRIEF</button><small id="yard-cash">—</small></div></header>
       <p id="yard-quill">—</p>
       <div class="yard-grid">
         <div><h3>THE BASE</h3><ul id="yard-base"></ul></div>
@@ -424,6 +460,7 @@
     <div><kbd>SHIFT</kbd>run up the throttle</div>
     <div><kbd>SPACE</kbd>climb <kbd>C</kbd>descend to land</div>
     <div><kbd>Q</kbd>get out / climb back in</div>
+    <div><kbd>/</kbd>the brief <kbd>ESC</kbd>close</div>
     <div><kbd>SPACE</kbd>fire <kbd>E</kbd>winch / scan <kbd>F</kbd>flares</div>
     <div><kbd>1 2 3</kbd>weapons <kbd>B</kbd>the yard</div>
     <div><kbd>WHEEL</kbd>or<kbd>- =</kbd>zoom <kbd>0</kbd>reset</div>
@@ -506,6 +543,12 @@
       </div>
       <button id="intro-go">TAKE THE FIRST JOB</button>
     </div>
+  </section>
+
+  <!-- One sentence at a time. Sits low so it never covers the machine or the panels. -->
+  <section id="teach" hidden>
+    <p id="teach-say">—</p>
+    <div><span id="teach-hint">—</span><button id="teach-skip">SKIP</button></div>
   </section>
 
   <div id="flash" hidden></div>

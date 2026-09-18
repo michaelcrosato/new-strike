@@ -10,22 +10,23 @@ the twelve kinds of job you fly.
 
 ```powershell
 npm run world          # builds the game and serves it
-npm test               # 141 checks across nine suites
-npm run verify:world   # 30 browser checks against the built bundle (server must be running)
+npm test               # 148 checks across ten suites
+npm run verify:world   # 33 browser checks against the built bundle (server must be running)
 ```
 
 Open **http://localhost:4189**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
 `SPACE` fire, `E` winch, scan or mark, `F` flares, `1 2 3` weapons,
-**wheel or `-` `=` zoom**, `0` reset the view,
-`B` the yard, `M` region map, `H` back to the pad, `G` hide the panels.
+**wheel or `-` `=` zoom**, `0` reset the view, `Q` get out or climb back in,
+`B` the yard, `M` region map, `H` back to the pad, `G` hide the panels, `/` the brief.
 `?seed=12345` generates a different region.
 
 MERCENARY STRIKE is what the site serves at its root. The BLOCKHAWK campaign it grew out of
 keeps its own page at `/blockhawk.html`.
 
-A first visit gets a briefing from Quill that describes the region that was actually
-generated — where you are parked, what the nearest landmark is, and what all nine areas are
-called. It happens once per seed.
+A first visit does not get a briefing. It starts you on foot in the yard and teaches itself
+one sentence at a time, in about a minute, with a delivery already in your hands — see
+**The first minute** below. Quill's briefing still exists and still describes the region that
+was actually generated, but it is a reference panel now: `/`, or THE BRIEF in the yard.
 
 ## Scale
 
@@ -520,6 +521,58 @@ from an older build still boots because it is merged over a fresh profile rather
 replacing it. With any panel open the aircraft holds station instead of drifting away while
 you read.
 
+### The yard you stand in — `src/yard.js`
+
+`findHomeSite` picked a flat, dry, unclaimed patch and the game drew nothing on it, so the
+place the whole outfit is built from was an empty field. It is now **692 triangles in one
+merged mesh**: a scraped circle of dirt with a ring of stones round it, two tents pitched
+across each other, a folding table, a crate, fuel drums standing in the dirt, a tarpaulin on
+four poles where the repairs happen, and a five-metre whip aerial. Nothing more, because at
+the start you have paid for nothing.
+
+Every piece is gated on the profile, so the fittings you buy in the yard screen change the
+yard you are standing in — the dirt becomes poured concrete with a painted ring and a
+windsock and then amber lights, the drums become a bowser and then a buried tank with a pump,
+the tarpaulin becomes a gantry and then a shed, the whip becomes a ten- and then a
+sixteen-metre mast, and a hangar frame appears behind the pad. Buying anything rebuilds the
+mesh on the spot. Every piece is also sat on `world.groundHeight` under itself, because the
+home site is flat but not level and nothing here flattens the terrain.
+
+## The first minute — `src/tutorial.js`
+
+The opening used to be a briefing card with a button, which is homework rather than an
+introduction. It is now **ten steps, one sentence each**, and each sentence is attached to
+something the player has to actually do:
+
+| Step | What it says, and what clears it |
+| --- | --- |
+| `yard` | names the region you are standing in — walk |
+| `trade` | you fly for money, no army and no flag — keep walking |
+| `board` | that machine is everything you own — `Q` at the door |
+| `lift` | `SPACE` is the collective — take her up |
+| `fly` | `W A S D` flies her, the mouse points her — get clear of the pad |
+| `job` | there is already a crate aboard, for a named settlement |
+| `map` | `M` for the region, the ring is the drop — open it |
+| `drop` | hold `E` over the ring to set the crate down |
+| `home` | your own pad is the only place that refuels you — go back |
+| `done` | take another, spend the fee, keep going |
+
+A step holds its sentence for its own minimum however fast the player is, so the script cannot
+flicker past in the first two seconds; it then waits for its own condition and nothing else,
+so thirty seconds of walking never teaches you to fly. The dwell times add up to **21.5
+seconds** of reading, and a browser play-through of the whole thing took **37 seconds**. `ESC` or SKIP
+abandons it for good.
+
+The job in step `job` is not put on the board to be found: `openingContract` in `src/agency.js`
+picks the nearest settlement more than 45 units from the yard, builds a full delivery contract
+with the same fields `generateContracts` produces, and hands it over. It measures 0.60–0.68 km
+across the seeds checked and pays around 1,330 — a pick-up and a drop-off with nobody shooting,
+so nothing about the contract board has to be explained before the player has flown one.
+
+`src/tutorial.js` touches no renderer, no DOM and no world: it is a step list and a state
+machine that takes a snapshot each tick, which is what makes the whole opening playable in a
+unit test in order and at speed.
+
 ## Sound and the winch
 
 Sound is the campaign's synthesised engine, so the open world costs no assets: a filtered
@@ -537,8 +590,9 @@ Wired: the region and its nine distinct areas, the nine landmarks, the streamer,
 meshing with blended biomes, flight, the region map with region names and landmark markers,
 combat with streamed garrisons, standing-driven hostility, all twelve contract kinds with
 their failure states, four complications, the contract board, payment, the day rolling over,
-the yard with upgrades and hiring, saving, the first-run briefing, sound, the winch, and the
-telemetry that shows all of it.
+the yard with upgrades and hiring, saving, the yard you stand in and the ten-step opening
+that teaches it, the briefing as a reference panel, sound, the winch, and the telemetry that
+shows all of it.
 
 Also wired: eight steps of zoom to eight times the default view, reachable by wheel, by key
 and by pinching the world; the coarse region mesh that fills the far field; and the
@@ -598,12 +652,18 @@ which was long enough for the browser to throw away the next tap.
 
 ## Verification
 
-- **141 module checks** across nine suites: the campaign parity harness, the campaign
+- **148 module checks** across ten suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
-  layer with its landmarks and place names, and the newer four kinds with their complications.
-- **18 browser checks** (`npm run verify:world`) against the built single file served at the
-  site root: it boots and renders on both backends to the same picture, the briefing describes
-  the generated region, the frame keeps the original's upbeat range and each area carries its
+  layer with its landmarks and place names, the newer four kinds with their complications,
+  flight and the speed envelope, landing and walking, and the opening script — which is played
+  through the way a player would play it and checked for one sentence per step, an order that
+  teaches boarding before flying, a step that cannot be skipped past in a single frame, and a
+  minute that does not turn into five.
+- **33 browser checks** (`npm run verify:world`) against the built single file served at the
+  site root: it boots and renders on both backends to the same picture, a first run starts on
+  foot in a yard that exists and is taught one sentence at a time, the opening plays in order
+  and hands the pilot a delivery without a trip to the board, the briefing opens on demand and
+  still describes the generated region, the teaching can be abandoned, the frame keeps the original's upbeat range and each area carries its
   own tone, real keyboard input flies the aircraft at a gunship's cruise and top speed, the dual-stick
   controls fly and aim independently and the gun follows the nose, the aircraft lands on its
   skids and the pilot gets out and walks, the camera stays above the ground everywhere including the highest
@@ -616,11 +676,13 @@ which was long enough for the browser to throw away the next tap.
   survives a reload, weather closes in and lifts, a ten-kilometre transit stays bounded, the
   map pans and zooms through its five steps under a real wheel and a real mouse drag and
   redraws the terrain at each scale, and there are no external requests or script errors.
-- **31 mobile checks** (`npm run verify:mobile`), the same built file at 390×844 and 844×390
+- **39 mobile checks** (`npm run verify:mobile`), the same built file at 390×844 and 844×390
   with touch emulation and a phone user agent, driven by real browser-level touch input
   through the debugger protocol rather than synthesised events — so pointer capture, gesture
   recognition and `touch-action` behave as they do under a thumb. Both orientations: it boots
-  and knows it has a coarse pointer, the briefing fits with its one button on screen, no panel
+  and knows it has a coarse pointer, the opening sentence is on screen and clear of every
+  control a thumb lands on, a tap on SKIP gets past the teaching, the briefing is reached from
+  the yard and fits with its one button on screen, no panel
   hangs off an edge and the page does not scroll sideways, the chrome covers 14% of the screen
   upright and 20% turned over rather than the 63% it used to, a thumb on the stick flies the
   aircraft and releasing it centres, the fire button puts rounds in the air and the winch
