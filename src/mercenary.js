@@ -9,6 +9,7 @@ import * as THREE from 'three/webgpu';
 import { createRenderer, createPost, createSeaMaterial, backendName, frameDrawCalls, forcedWebGL, TONES } from './stage.js';
 import { LOOK, REGION_GRADE, GRADE_STRENGTH } from './look.js';
 import { FLIGHT, CRUISE, TOP, unitsToKmh } from './flight.js';
+import { LANDING, FOOT, WALK, landingCheck, slowEnoughToLand, stepWalk, stepOutSpot, canBoard } from './crew.js';
 import { createWorld, WORLD, BIOMES, FACTIONS } from './worldgen.js';
 import { ChunkStreamer, desiredChunks } from './streaming.js';
 import { buildChunk, createMaterials } from './terrain.js';
@@ -168,6 +169,55 @@ function buildAirframe() {
 }
 const heli = buildAirframe();
 scene.add(heli.group);
+
+// The pilot, for when you climb out. Built to the same construction-toy rule as everything
+// else: a few boxes, flat-shaded, and legs that swing so the walk reads at this distance.
+function buildPilot() {
+  const group = new THREE.Group();
+  const paint = (geo, hex) => new THREE.Mesh(geo,
+    new THREE.MeshStandardMaterial({ color: hex, roughness: .85, metalness: .04, flatShading: true }));
+  const box = (parent, x, y, z, w, h, d, hex) => {
+    const mesh = paint(new THREE.BoxGeometry(w, h, d), hex);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    parent.add(mesh);
+    return mesh;
+  };
+  // The torso and head hang off one pivot so the whole upper body can bob with the stride.
+  const body = new THREE.Group();
+  body.position.y = 0.92;
+  group.add(body);
+  box(body, 0, 0, 0, 0.52, 0.62, 0.3, 0x5c6b46);          // flight suit
+  box(body, 0, 0.16, -0.17, 0.42, 0.34, 0.1, 0x3f4a32);   // vest
+  box(body, 0, 0.5, 0, 0.36, 0.36, 0.36, 0xdfd9bb);       // helmet
+  box(body, 0, 0.46, -0.19, 0.28, 0.16, 0.06, 0x173b4a);  // visor
+  box(body, -0.35, -0.02, 0, 0.16, 0.5, 0.16, 0x5c6b46);  // arms
+  box(body, 0.35, -0.02, 0, 0.16, 0.5, 0.16, 0x5c6b46);
+
+  // Legs pivot at the hip, which is what makes a stride rather than a slide.
+  const legLeft = new THREE.Group();
+  legLeft.position.set(-0.13, 0.62, 0);
+  group.add(legLeft);
+  box(legLeft, 0, -0.31, 0, 0.18, 0.62, 0.18, 0x3f4a32);
+  const legRight = new THREE.Group();
+  legRight.position.set(0.13, 0.62, 0);
+  group.add(legRight);
+  box(legRight, 0, -0.31, 0, 0.18, 0.62, 0.18, 0x3f4a32);
+
+  // The same zoom marker the aircraft carries: a person is one unit of a hundred-unit view.
+  const marker = new THREE.Mesh(new THREE.RingGeometry(0.86, 1, 32),
+    new THREE.MeshBasicMaterial({ color: 0x9fe0ff, transparent: true, opacity: 0.85,
+      side: THREE.DoubleSide, depthWrite: false, depthTest: false }));
+  marker.rotation.x = -Math.PI / 2;
+  marker.renderOrder = 6;
+  marker.visible = false;
+  group.add(marker);
+
+  group.visible = false;
+  return { group, body, legLeft, legRight, marker };
+}
+const figure = buildPilot();
+scene.add(figure.group);
 
 // ---------------------------------------------------------------- streaming
 const materials = createMaterials();
@@ -405,7 +455,9 @@ function settleContract(success, reason) {
 
 function updateActive(dt) {
   if (!mission) { $('mission').hidden = true; return; }
-  stepMission(mission, { world, craft, combat, input: { interact: keys.has('KeyE') || touchInput.winch } }, dt);
+  // Mission work is done from the aircraft, so the winch and the scan do nothing on foot.
+  stepMission(mission, { world, craft, combat,
+    input: { interact: flying() && (keys.has('KeyE') || touchInput.winch) } }, dt);
   for (const event of mission.events) {
     if (event.type === 'aboard') flash(event.remaining ? `ABOARD · ${event.remaining} TO GO` : 'ALL ABOARD');
     if (event.type === 'scanned') flash('SCAN COMPLETE');
@@ -585,12 +637,12 @@ addEventListener('pointermove', event => {
 });
 
 // Where the pointer is on the ground, at the aircraft's own altitude.
-function aimFromPointer() {
+function aimFromPointer(who) {
   if (performance.now() > pointerAimUntil && !mouseFire) return null;
-  aimPlane.constant = -craft.y;
+  aimPlane.constant = -who.y;
   aimRay.setFromCamera(pointer, camera);
   if (!aimRay.ray.intersectPlane(aimPlane, aimPoint)) return null;
-  const dx = aimPoint.x - craft.x, dz = aimPoint.z - craft.z;
+  const dx = aimPoint.x - who.x, dz = aimPoint.z - who.z;
   // A dead zone around the aircraft itself. Without it, a cursor resting near the machine
   // — which is where it sits if nobody has moved it — swings the nose about on sub-unit
   // differences, and the nose ends up following the camera instead of the player.
@@ -599,7 +651,7 @@ function aimFromPointer() {
 }
 
 // The heading the player is asking for, or null if they are not asking.
-function requestedAim(held, stick) {
+function requestedAim(held, stick, who = craft) {
   if (Math.hypot(stick.aimX, stick.aimY) > 0.22) {
     groundVector(stick.aimX, stick.aimY, aimVector);
     return headingOf(aimVector.x, aimVector.z);
@@ -612,7 +664,7 @@ function requestedAim(held, stick) {
     groundVector(kx, ky, aimVector);
     return headingOf(aimVector.x, aimVector.z);
   }
-  return aimFromPointer();
+  return aimFromPointer(who);
 }
 
 addEventListener('keydown', e => {
@@ -632,6 +684,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Minus' || e.code === 'NumpadSubtract' || e.code === 'BracketLeft') mapping ? setMapZoom(mapStep - 1) : zoomBy(1);
   if (e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'BracketRight') mapping ? setMapZoom(mapStep + 1) : zoomBy(-1);
   if (e.code === 'Digit0' || e.code === 'Numpad0') mapping ? resetMapView() : setZoom(ZOOM_DEFAULT);
+  if (e.code === 'KeyQ') toggleStance();
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyH') teleportHome();
   if (e.code === 'KeyG') { $('debug').classList.toggle('hidden'); $('outfit').classList.toggle('hidden'); $('hud').classList.toggle('hidden'); }
@@ -645,6 +698,9 @@ addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => { keys.clear(); mouseFire = false; releaseThumbs(); });
 
 function teleportHome() {
+  // Whatever you were doing, you are in the aircraft and airborne again.
+  stance = 'flying';
+  figure.group.visible = false;
   craft.x = home.x; craft.z = home.z; craft.vx = 0; craft.vz = 0;
   craft.y = world.groundHeight(home.x, home.z) + 16;
   cameraFocus.set(craft.x, craft.y - 16, craft.z);
@@ -661,9 +717,188 @@ const overlayOpen = () => !$('intro').hidden || !$('yard').hidden || !$('map-pan
 // Nothing held, for when a panel is up.
 const IDLE_STICK = { x: 0, y: 0, aimX: 0, aimY: 0, boost: false, climb: false, descend: false };
 
+// ---------------------------------------------------------------- stance
+// Three states, and getting out of the aircraft is the transitions between them. `flying` is
+// everything this game was; `landed` is the skids on the ground with the rotor spun down;
+// `afoot` is the pilot out of it, walking.
+let stance = 'flying';
+let rotorSpeed = 1, rotorAngle = 0;   // eased, so the rotor winds down rather than stopping
+let landingRefusal = 0;               // so a refusal does not flash every frame you hold C
+// A thumb has no C key to hold, so the rail's LAND button asks for a descent and the flight
+// model holds it for a few seconds — long enough to reach the ground from a normal hover.
+let landingAssist = 0;
+
+const pilot = { x: home.x, z: home.z, y: home.height, vx: 0, vz: 0, yaw: 0, aim: 0, stride: 0, pace: 0 };
+
+// What the camera follows, what the streamer loads around, and what the stick drives.
+const subject = () => (stance === 'afoot' ? pilot : craft);
+const flying = () => stance === 'flying';
+
+function refuse(message) {
+  if (performance.now() < landingRefusal) return false;
+  landingRefusal = performance.now() + 2600;
+  flash(message);
+  return false;
+}
+
+function touchDown() {
+  const check = landingCheck(world, craft.x, craft.z);
+  if (!check.ok) return refuse(check.reason);
+  if (!slowEnoughToLand(craft.vx, craft.vz)) {
+    return refuse(`TOO FAST TO SET DOWN · SLOW BELOW ${LANDING.maxTouchdownKmh} KM/H`);
+  }
+  stance = 'landed';
+  landingAssist = 0;
+  craft.vx = 0; craft.vz = 0;
+  craft.y = check.ground + LANDING.skidHeight;
+  audio.event({ type: 'radio' });
+  flash(`DOWN · ${world.regionAt(craft.x, craft.z).name} · Q TO GET OUT`);
+  renderStance();
+  return true;
+}
+
+function liftOff() {
+  stance = 'flying';
+  landingAssist = 0;
+  audio.event({ type: 'radio' });
+  flash('LIFTING OFF');
+  renderStance();
+}
+
+function climbOut() {
+  if (stance !== 'landed') { flash('SET DOWN FIRST · HOLD C TO LAND'); return false; }
+  const spot = stepOutSpot(world, craft);
+  pilot.x = spot.x; pilot.z = spot.z;
+  pilot.y = world.groundHeight(pilot.x, pilot.z);
+  pilot.vx = 0; pilot.vz = 0;
+  pilot.yaw = craft.yaw; pilot.aim = craft.yaw;
+  stance = 'afoot';
+  updateCamera(0, true);
+  audio.event({ type: 'objective' });
+  flash('ON FOOT · Q AT THE AIRCRAFT TO GET BACK IN');
+  renderStance();
+  return true;
+}
+
+function climbIn() {
+  if (!canBoard(pilot, craft)) {
+    const away = Math.round(Math.hypot(pilot.x - craft.x, pilot.z - craft.z) * WORLD.metresPerUnit);
+    flash(`${away} M FROM THE AIRCRAFT`);
+    return false;
+  }
+  stance = 'landed';
+  pilot.vx = 0; pilot.vz = 0;
+  figure.group.visible = false;
+  updateCamera(0, true);
+  audio.event({ type: 'radio' });
+  flash('ABOARD');
+  renderStance();
+  return true;
+}
+
+const toggleStance = () => (stance === 'afoot' ? climbIn() : climbOut());
+
+// What state you are in, and what the control in front of you will do about it. The rail
+// button makes the same decision the Q key does, so a thumb and a keyboard read the same
+// game.
+function renderStance() {
+  const reach = canBoard(pilot, craft);
+  const away = Math.round(Math.hypot(pilot.x - craft.x, pilot.z - craft.z) * WORLD.metresPerUnit);
+  const [state, prompt] = {
+    flying: ['FLYING', 'HOLD C TO SET DOWN'],
+    landed: ['ON THE GROUND', 'Q TO GET OUT · SPACE TO LIFT'],
+    afoot: ['ON FOOT', reach ? 'Q TO CLIMB BACK IN' : `${away} M TO THE AIRCRAFT`],
+  }[stance];
+  const line = $('stance');
+  if (line) line.innerHTML = `<b>${state}</b><em>${prompt}</em>`;
+  const rail = $('rail-stance');
+  if (rail) {
+    rail.textContent = stance === 'flying' ? 'LAND' : stance === 'landed' ? 'GET OUT' : reach ? 'BOARD' : 'WALK';
+    rail.classList.toggle('on', stance !== 'flying' && (stance === 'landed' || reach));
+  }
+}
+
+// The rotor winds down when the machine is sitting there, which is most of what sells a
+// landing as a landing.
+function updateRotor(dt) {
+  rotorSpeed += ((flying() ? 1 : LANDING.idleRotor) - rotorSpeed) * (1 - Math.exp(-1.2 * dt));
+  rotorAngle += rotorSpeed * 34 * dt;
+  heli.rotor.rotation.y = rotorAngle;
+  heli.tail.rotation.x = rotorAngle * 1.3;
+}
+
+// The aircraft, parked. It holds its position, sits on its skids and stops banking.
+function holdAircraft(dt) {
+  const ground = world.groundHeight(craft.x, craft.z);
+  craft.vx = 0; craft.vz = 0;
+  craft.y = ground + LANDING.skidHeight;
+  heli.group.position.set(craft.x, craft.y, craft.z);
+  heli.group.rotation.y = -craft.yaw;
+  heli.body.rotation.x = THREE.MathUtils.damp(heli.body.rotation.x, 0, 6, dt);
+  heli.body.rotation.z = THREE.MathUtils.damp(heli.body.rotation.z, 0, 6, dt);
+  heli.winch.visible = false;
+}
+
+// Fuel: burnt while the rotor is turning, topped up over your own pad, and neither while the
+// machine is sitting there with the engine off.
+function serviceOrBurn(dt, burning, boost = false) {
+  const base = world.home;
+  const overYard = Math.hypot(craft.x - base.x, craft.z - base.z) < 40;
+  if (overYard && Math.hypot(craft.vx, craft.vz) < HOVER_SERVICE) {
+    combat.fuel = Math.min(combat.maxFuel, combat.fuel + 26 * dt * (1 + profile.base.fuel));
+    combat.armour = Math.min(combat.maxArmour, combat.armour + 14 * dt * (1 + profile.base.workshop));
+    for (const w of availableWeapons(profile.heli)) {
+      combat.ammo[w.id] = Math.min(w.max, (combat.ammo[w.id] ?? 0) + w.max / 6 * dt);
+    }
+  } else if (burning) {
+    combat.fuel = Math.max(0, combat.fuel - dt * (boost ? FLIGHT.burn.dash : FLIGHT.burn.cruise));
+    if (combat.fuel <= 0) loseAircraft();
+  }
+  combat.invulnerable = Math.max(0, (combat.invulnerable ?? 0) - dt);
+}
+
+// One step of walking, and the figure that does it.
+function walk(dt) {
+  const held = overlayOpen() ? new Set() : keys;
+  const stick = overlayOpen() ? IDLE_STICK : touchInput;
+  const dx = (held.has('KeyD') ? 1 : 0) - (held.has('KeyA') ? 1 : 0) + stick.x;
+  const dy = (held.has('KeyS') ? 1 : 0) - (held.has('KeyW') ? 1 : 0) + stick.y;
+  groundVector(dx, dy, aimVector);
+  const len = Math.hypot(aimVector.x, aimVector.z);
+  const move = len > 1 ? { x: aimVector.x / len, z: aimVector.z / len } : { x: aimVector.x, z: aimVector.z };
+  const running = held.has('ShiftLeft') || held.has('ShiftRight') || stick.boost;
+  stepWalk(pilot, world, move, running, dt);
+
+  // The same dual-stick rule as the aircraft: an aim input points the pilot, and without one
+  // they face the way they are walking.
+  const asked = requestedAim(held, stick, pilot);
+  if (asked !== null) pilot.aim = asked;
+  else if (len > 0.08) pilot.aim = headingOf(move.x, move.z);
+  pilot.yaw = turnToward(pilot.yaw, pilot.aim, FOOT.turnRate, dt);
+
+  figure.group.visible = true;
+  figure.group.position.set(pilot.x, pilot.y, pilot.z);
+  figure.group.rotation.y = -pilot.yaw;
+  // A stride driven by distance covered rather than by time, so the legs do not pedal on the
+  // spot when the pilot stops.
+  const effort = Math.min(1, pilot.pace / WALK);
+  const swing = Math.sin(pilot.stride * 2.6) * effort * 0.6;
+  figure.legLeft.rotation.x = swing;
+  figure.legRight.rotation.x = -swing;
+  figure.body.position.y = 0.92 + Math.abs(Math.cos(pilot.stride * 2.6)) * 0.05 * effort;
+}
+
 function flight(dt) {
   const held = overlayOpen() ? new Set() : keys;
   const stick = overlayOpen() ? IDLE_STICK : touchInput;
+
+  // Out of the aircraft: the pilot walks and the machine sits where it was left.
+  if (stance === 'afoot') { walk(dt); holdAircraft(dt); serviceOrBurn(dt, false); return; }
+  // On the ground: nothing moves until the collective comes up.
+  if (stance === 'landed') {
+    if (!(held.has('Space') || stick.climb)) { holdAircraft(dt); serviceOrBurn(dt, false); return; }
+    liftOff();
+  }
   // The arrows aim now rather than duplicating WASD, which is what makes this dual-stick.
   const dx = (held.has('KeyD') ? 1 : 0) - (held.has('KeyA') ? 1 : 0) + stick.x;
   const dy = (held.has('KeyS') ? 1 : 0) - (held.has('KeyW') ? 1 : 0) + stick.y;
@@ -699,12 +934,22 @@ function flight(dt) {
     craft.yaw = turnToward(craft.yaw, craft.aim, rate, dt);
   }
 
-  // Terrain following: hold a clearance over whatever is below, climb fast, sink slowly.
+  // Height. Holding the descend control now goes all the way to the ground instead of
+  // stopping at a twenty-metre hover, which is what makes a landing possible at all. Over
+  // ground it cannot use — water, a cliff — it holds a low hover and says why.
   const ground = world.groundHeight(craft.x, craft.z);
-  const lift = held.has('Space') || stick.climb ? 26 : held.has('KeyC') || stick.descend ? -14 : 0;
-  const wanted = Math.max(ground + 11, craft.y + lift * dt * 6);
-  craft.y += (wanted - craft.y) * (1 - Math.exp(-(wanted > craft.y ? 4.5 : 1.8) * dt));
-  craft.y = clamp(craft.y, ground + 4, 260);
+  const climbing = held.has('Space') || stick.climb;
+  const descending = (held.has('KeyC') || stick.descend || performance.now() < landingAssist) && !climbing;
+  if (descending) {
+    const check = landingCheck(world, craft.x, craft.z);
+    const floor = ground + (check.ok ? LANDING.skidHeight : LANDING.refusedClearance);
+    craft.y = Math.max(floor, craft.y - LANDING.descentRate * dt);
+    if (craft.y <= floor + 0.06 && touchDown()) return;
+  } else {
+    const wanted = Math.max(ground + LANDING.liftClearance, craft.y + (climbing ? 26 : 0) * dt * 6);
+    craft.y += (wanted - craft.y) * (1 - Math.exp(-(wanted > craft.y ? 4.5 : 1.8) * dt));
+  }
+  craft.y = clamp(craft.y, ground + LANDING.skidHeight, 260);
 
   heli.group.position.set(craft.x, craft.y, craft.z);
   // The negative, because the nose is the model's own local -Z. See headingOf.
@@ -714,18 +959,7 @@ function flight(dt) {
   heli.body.rotation.x = THREE.MathUtils.damp(heli.body.rotation.x, -forward * 0.006, 6, dt);
   heli.body.rotation.z = THREE.MathUtils.damp(heli.body.rotation.z, -side * 0.009, 6, dt);
 
-  // Fuel burns while flying and tops up over your own pad.
-  const home = world.home;
-  const overYard = Math.hypot(craft.x - home.x, craft.z - home.z) < 40;
-  if (overYard && Math.hypot(craft.vx, craft.vz) < HOVER_SERVICE) {
-    combat.fuel = Math.min(combat.maxFuel, combat.fuel + 26 * dt * (1 + profile.base.fuel));
-    combat.armour = Math.min(combat.maxArmour, combat.armour + 14 * dt * (1 + profile.base.workshop));
-    for (const w of availableWeapons(profile.heli)) combat.ammo[w.id] = Math.min(w.max, (combat.ammo[w.id] ?? 0) + w.max / 6 * dt);
-  } else {
-    combat.fuel = Math.max(0, combat.fuel - dt * (boost ? FLIGHT.burn.dash : FLIGHT.burn.cruise));
-    if (combat.fuel <= 0) loseAircraft();
-  }
-  combat.invulnerable = Math.max(0, (combat.invulnerable ?? 0) - dt);
+  serviceOrBurn(dt, true, boost);
 }
 
 // ---------------------------------------------------------------- winch and weather
@@ -735,16 +969,24 @@ let cableOut = 0;
 // The ground ring under the aircraft, sized so it stays the same size on screen however
 // far out the view is pulled.
 function updateMarker() {
-  const showing = zoom > 1.35;
-  heli.marker.visible = showing;
-  if (!showing) return;
+  const showing = zoom > 1.35 || stance === 'afoot';
   const radius = viewHeight() / 26;
-  heli.marker.scale.setScalar(radius);
-  heli.marker.position.y = world.groundHeight(craft.x, craft.z) - craft.y + 0.6;
+  // The aircraft keeps its ring whenever the pilot is out of it, so you can always see where
+  // you left it.
+  heli.marker.visible = showing;
+  if (heli.marker.visible) {
+    heli.marker.scale.setScalar(radius);
+    heli.marker.position.y = world.groundHeight(craft.x, craft.z) - craft.y + 0.6;
+  }
+  figure.marker.visible = stance === 'afoot' && zoom > 1.35;
+  if (figure.marker.visible) {
+    figure.marker.scale.setScalar(radius);
+    figure.marker.position.y = 0.4;
+  }
 }
 
 function updateWinch(dt) {
-  const usable = profile.heli.winch > 0 && mission && WINCH_KINDS.has(mission.kind);
+  const usable = flying() && profile.heli.winch > 0 && mission && WINCH_KINDS.has(mission.kind);
   const running = usable && (keys.has('KeyE') || touchInput.winch);
   // Paid out to just above whatever is underneath, so the hook reaches the ground you are
   // hovering over rather than a fixed length into it.
@@ -814,7 +1056,10 @@ let zoom = ZOOM_STEPS[zoomStep];
 
 // The view opens up a little with speed. The coefficient is higher than it was because
 // the speeds are lower: at the old one, cruise and top looked the same.
-const baseView = () => 104 + Math.hypot(craft.vx, craft.vz) * 1.5;
+// On foot the camera comes in close: a person is under two units tall and the flight
+// view is a hundred across.
+const baseView = () => (104 + Math.hypot(subject().vx, subject().vz) * 1.5)
+  * (stance === 'afoot' ? FOOT.viewScale : 1);
 // How much ground the frame covers vertically, in world units. The map reads this to draw
 // the view rectangle, so the two can never disagree about what you can see.
 function viewHeight() { return baseView() * zoom; }
@@ -874,8 +1119,9 @@ function updateCamera(dt, snap = false) {
   // summit, where the region legitimately reaches 158, the camera ended up *underneath the
   // terrain* and the frame was rendered from inside the mountain. Following the ground
   // keeps the framing identical at every elevation.
-  const floor = world.groundHeight(craft.x, craft.z);
-  const target = new THREE.Vector3(craft.x + craft.vx * 0.5, floor, craft.z + craft.vz * 0.5);
+  const who = subject();
+  const floor = world.groundHeight(who.x, who.z);
+  const target = new THREE.Vector3(who.x + who.vx * 0.5, floor, who.z + who.vz * 0.5);
   if (snap) cameraFocus.copy(target); else cameraFocus.lerp(target, 1 - Math.exp(-4 * dt));
   // The camera pulls back as it zooms out. An orthographic projection does not care how
   // far away it is, but the clip planes do: without this a mountain at the edge of a wide
@@ -1302,8 +1548,9 @@ function paintMap() {
   // What the camera can actually see right now, which is how the zoom reads on the map.
   const halfZ = viewHeight() / 2 / mapView.span * size;
   const halfX = halfZ * (innerWidth / innerHeight);
+  const [vx, vy] = toMap(subject().x, subject().z);
   ctx.strokeStyle = 'rgba(244,237,201,.34)'; ctx.lineWidth = unit;
-  ctx.strokeRect(px - halfX, py - halfZ, halfX * 2, halfZ * 2);
+  ctx.strokeRect(vx - halfX, vy - halfZ, halfX * 2, halfZ * 2);
 
   // Zoomed in, the aircraft is often outside the window. An arrow pinned to the edge says
   // which way it is, so a zoomed map never loses you.
@@ -1319,15 +1566,34 @@ function paintMap() {
     ctx.restore();
   }
 
+  // On foot the pilot gets their own mark and a line back to the aircraft, because a person
+  // is invisible at this scale and walking away from your ride is the one mistake being able
+  // to get out makes possible.
+  if (stance === 'afoot') {
+    const [fx, fy] = toMap(pilot.x, pilot.z);
+    ctx.strokeStyle = 'rgba(159,224,255,.55)'; ctx.lineWidth = unit;
+    ctx.setLineDash([2 * unit, 3 * unit]);
+    ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(px, py); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   ctx.save();
   ctx.translate(px, py);
   ctx.rotate(craft.yaw);
-  ctx.fillStyle = '#f4edc9';
+  // Dimmed when it is parked and you are not in it.
+  ctx.fillStyle = stance === 'afoot' ? '#a9b49c' : '#f4edc9';
   ctx.strokeStyle = '#1c2a26'; ctx.lineWidth = unit;
   ctx.beginPath();
   ctx.moveTo(0, -7 * unit); ctx.lineTo(4.5 * unit, 5.5 * unit); ctx.lineTo(0, 2.5 * unit); ctx.lineTo(-4.5 * unit, 5.5 * unit);
   ctx.closePath(); ctx.fill(); ctx.stroke();
   ctx.restore();
+
+  if (stance === 'afoot') {
+    const [fx, fy] = toMap(pilot.x, pilot.z);
+    ctx.fillStyle = '#9fe0ff';
+    ctx.strokeStyle = '#12201c'; ctx.lineWidth = unit;
+    ctx.beginPath(); ctx.arc(fx, fy, 3.6 * unit, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
 
   const across = mapView.span * WORLD.metresPerUnit;
   $('map-scale').textContent = `${across >= 1000 ? +(across / 1000).toFixed(2) + ' KM' : Math.round(across) + ' M'} ACROSS`
@@ -1552,6 +1818,11 @@ for (const [id, action] of Object.entries({
   'rail-map': toggleMap,
   'rail-work': toggleWork,
   'rail-yard': toggleYard,
+  'rail-stance': () => {
+    // In the air this asks for a descent; on the ground it is the way out and back in.
+    if (stance === 'flying') { landingAssist = performance.now() + 5000; flash('SETTING DOWN'); }
+    else toggleStance();
+  },
   'rail-home': () => { teleportHome(); flash('BACK ON THE PAD'); },
   'rail-panels': () => document.body.classList.toggle('telemetry'),
 })) onTap($(id), event => { event.preventDefault(); action(); });
@@ -1565,6 +1836,7 @@ onTap($('weapons'), event => {
   if (index < 0 || index >= availableWeapons(profile.heli).length) return;
   combat.weapon = index;
   renderWeapons();
+  renderStance();
 });
 
 // Tapping the darkness around a card closes it, which is what a phone expects of a sheet
@@ -1585,7 +1857,8 @@ function frame(now) {
   flight(dt);
   syncHostiles(combat, world, profile, [...streamer.resident.keys()]);
   const events = stepCombat(combat, world, profile, craft,
-    { fire: keys.has('Space') || mouseFire || touchInput.fire, flare: keys.has('KeyF') || touchInput.flare }, dt);
+    { fire: flying() && (keys.has('Space') || mouseFire || touchInput.fire),
+      flare: flying() && (keys.has('KeyF') || touchInput.flare) }, dt);
   for (const event of events) {
     if (event.type === 'destroyed') {
       // Salvage rights: the fee is lower, but what you break on the way is yours.
@@ -1607,11 +1880,10 @@ function frame(now) {
     ...(mission?.convoy ? [mission.convoy] : [])]);
   tracers.sync(combat.projectiles);
   const t0 = performance.now();
-  const streamed = streamer.update(craft.x, craft.z);
+  const streamed = streamer.update(subject().x, subject().z);
   buildHitch = buildHitch * 0.8 + (performance.now() - t0) * 0.2;
   updateCamera(dt);
-  heli.rotor.rotation.y = clock * 34;
-  heli.tail.rotation.x = clock * 44;
+  updateRotor(dt);
   updateWinch(dt);
   updateMarker();
   updateWeather(dt);
@@ -1628,24 +1900,29 @@ function frame(now) {
 }
 
 function updateReadout(streamed) {
-  const s = world.sample(craft.x, craft.z);
+  // The panel reports whatever you are controlling. Reading the parked aircraft's zero
+  // while the player is walking at seven kilometres an hour is simply wrong.
+  const who = subject();
+  const s = world.sample(who.x, who.z);
   const km = v => (v * WORLD.metresPerUnit / 1000).toFixed(2);
-  $('pos').textContent = `${km(craft.x)} , ${km(craft.z)} km`;
-  $('alt').textContent = `${Math.round((craft.y - s.height) * WORLD.metresPerUnit)} m AGL`;
-  $('speed').textContent = `${Math.round(unitsToKmh(Math.hypot(craft.vx, craft.vz)))} / ${FLIGHT.topKmh} km/h`;
+  $('pos').textContent = `${km(who.x)} , ${km(who.z)} km`;
+  $('alt').textContent = `${Math.round((who.y - s.height) * WORLD.metresPerUnit)} m AGL`;
+  $('speed').textContent = stance === 'afoot'
+    ? `${Math.round(unitsToKmh(Math.hypot(who.vx, who.vz)))} / ${FOOT.runKmh} km/h ON FOOT`
+    : `${Math.round(unitsToKmh(Math.hypot(craft.vx, craft.vz)))} / ${FLIGHT.topKmh} km/h`;
   $('biome').textContent = BIOMES[s.biome].name;
-  const region = world.regionAt(craft.x, craft.z);
+  const region = world.regionAt(who.x, who.z);
   $('region').textContent = region.name;
   $('region').style.color = region.colour;
   $('territory').textContent = s.faction < 0 ? 'UNCLAIMED WATER' : FACTIONS[s.faction].name;
   $('territory').style.color = s.faction < 0 ? '#9fb49d' : FACTIONS[s.faction].colour;
   // Landmarks count as places, and outrank a village at the same distance — they are what
   // you actually navigate by.
-  const near = [...world.settlementsNear(craft.x, craft.z, 320), ...world.landmarksNear(craft.x, craft.z, 460)]
-    .sort((a, b) => (Math.hypot(a.x - craft.x, a.z - craft.z) - (a.landmark ? 140 : 0))
-      - (Math.hypot(b.x - craft.x, b.z - craft.z) - (b.landmark ? 140 : 0)))[0];
+  const near = [...world.settlementsNear(who.x, who.z, 320), ...world.landmarksNear(who.x, who.z, 460)]
+    .sort((a, b) => (Math.hypot(a.x - who.x, a.z - who.z) - (a.landmark ? 140 : 0))
+      - (Math.hypot(b.x - who.x, b.z - who.z) - (b.landmark ? 140 : 0)))[0];
   $('nearest').textContent = near
-    ? `${near.name} · ${near.kindName} · ${FACTIONS[near.faction].short} · ${Math.round(Math.hypot(near.x - craft.x, near.z - craft.z) * WORLD.metresPerUnit)} m`
+    ? `${near.name} · ${near.kindName} · ${FACTIONS[near.faction].short} · ${Math.round(Math.hypot(near.x - who.x, near.z - who.z) * WORLD.metresPerUnit)} m`
     : 'NOTHING WITHIN 1.6 KM';
   $('chunks').textContent = `${streamer.resident.size} resident · ${streamed.pending} queued · ${streamer.stats.built} built · ${streamer.stats.disposed} released`;
   $('geometry').textContent = `${residentMeshes} meshes · ${Math.round(residentTriangles / 1000)}k triangles held`;
@@ -1704,6 +1981,11 @@ window.merc = {
     nose: (() => { const v = new THREE.Vector3(0, 0, -1).applyQuaternion(heli.group.quaternion); return { x: +v.x.toFixed(3), z: +v.z.toFixed(3) }; })(),
     travel: (() => { const l = Math.hypot(craft.vx, craft.vz) || 1; return { x: +(craft.vx / l).toFixed(3), z: +(craft.vz / l).toFixed(3) }; })(),
     yaw: +craft.yaw.toFixed(3), aim: +craft.aim.toFixed(3), aiming: craft.aiming,
+    stance,
+    pilot: { x: +pilot.x.toFixed(2), z: +pilot.z.toFixed(2), y: +pilot.y.toFixed(2),
+      speedKmh: Math.round(unitsToKmh(Math.hypot(pilot.vx, pilot.vz))), visible: figure.group.visible },
+    toAircraft: +Math.hypot(pilot.x - craft.x, pilot.z - craft.z).toFixed(2),
+    rotor: +rotorSpeed.toFixed(3),
     tint: '#' + regionTint.getHexString(), tintAmount: +tintAt.toFixed(3),
     exposure: renderer.toneMappingExposure, sun: +sun.intensity.toFixed(2), hemi: +hemisphere.intensity.toFixed(2),
     fps: Math.round(fps), streamMs: +buildHitch.toFixed(2),
@@ -1726,6 +2008,13 @@ window.merc = {
   marks: () => world.landmarks().map(m => ({ key: m.key, short: m.short, x: m.x, z: m.z,
     height: +m.height.toFixed(1), region: m.region })),
   intro: () => { showIntro(); return true; },
+  // Landing, and getting in and out, for the browser suite.
+  land: (seconds = 6) => { landingAssist = performance.now() + seconds * 1000; return true; },
+  stanceNow: () => stance,
+  getOut: () => climbOut(),
+  getIn: () => climbIn(),
+  landingHere: () => landingCheck(world, craft.x, craft.z),
+  pilotAt: () => ({ ...pilot }),
   // Where the pointer is on the ground, for verifying that the nose follows it.
   aimPoint: () => ({ x: +aimPoint.x.toFixed(2), z: +aimPoint.z.toFixed(2) }),
   zoomTo: step => { setZoom(step, true); updateCamera(0, true); return ZOOM_STEPS[zoomStep]; },
@@ -1785,11 +2074,12 @@ window.merc = {
       updateActive(step);
       // The same per-frame updates the real loop runs, so what the harness exercises is
       // what the game does rather than a subset of it.
+      updateRotor(step);
       updateWinch(step);
       updateMarker();
       updateWeather(step);
       updateTone(step);
-      streamer.update(craft.x, craft.z);
+      streamer.update(subject().x, subject().z);
     }
     keys.clear();
     return { armour: Math.round(combat.armour), fuel: Math.round(combat.fuel), kills: combat.kills,

@@ -276,6 +276,133 @@ try {
   evidence.measurements.dualStick = { headings, behind: agreement(behind.nose, behind.travel), across: agreement(across.nose, across.travel), rounds };
   record('Rounds go where the aircraft is pointing, not where it is flying');
 
+  // ---------------------------------------------------------------- landing and on foot
+  // Putting it down anywhere, and getting out of it. The flight model used to floor the
+  // aircraft eleven units above the ground and never let it land at all.
+  await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+  await page.waitForTimeout(300);
+  const landable = await page.evaluate(() => window.merc.landingHere());
+  assert.equal(landable.ok, true, `the yard itself must be landable: ${landable.reason}`);
+
+  // Holding the descend key takes it all the way to the surface.
+  await page.keyboard.down('c');
+  await page.waitForFunction(() => window.merc.state().stance === 'landed', null, { timeout: 20000 });
+  await page.keyboard.up('c');
+  const down = await state();
+  const surface = await page.evaluate(() => window.merc.world.groundHeight(window.merc.craft.x, window.merc.craft.z));
+  assert.equal(down.stance, 'landed');
+  assert.ok(Math.abs(down.position.y - surface - 1.7) < 0.2,
+    `the skids rest on the surface: ${(down.position.y - surface).toFixed(2)} units above it`);
+  assert.equal(down.speedKmh, 0, 'and it has stopped');
+  // The rotor winds down, which is most of what makes a landing read as one.
+  await page.waitForTimeout(2600);
+  const spun = await state();
+  assert.ok(spun.rotor < 0.25, `the rotor winds down on the ground: ${spun.rotor}`);
+  record('Holding the descend control puts the aircraft down on its skids, and the rotor winds down');
+
+  // Out on foot.
+  await page.keyboard.press('q');
+  await page.waitForTimeout(400);
+  const out = await state();
+  assert.equal(out.stance, 'afoot');
+  assert.equal(out.pilot.visible, true, 'the pilot is drawn');
+  assert.ok(out.toAircraft > 3 && out.toAircraft < 12,
+    `stepped out clear of the rotor: ${out.toAircraft} units`);
+  const feet = await page.evaluate(() => {
+    const p = window.merc.pilotAt();
+    return +(p.y - window.merc.world.groundHeight(p.x, p.z)).toFixed(3);
+  });
+  assert.ok(Math.abs(feet) < 0.05, `feet on the surface: ${feet} above it`);
+  // The camera follows the pilot now, not the aircraft: its focus should sit over them.
+  const focus = await page.evaluate(() => {
+    const m = window.merc, p = m.pilotAt(), c = m.camera.position;
+    return { toPilot: Math.hypot(c.x - p.x, c.z - p.z), offset: Math.hypot(112, 138) };
+  });
+  assert.ok(Math.abs(focus.toPilot - focus.offset) < 6,
+    `the camera is framed on the pilot: ${focus.toPilot.toFixed(1)} against an offset of ${focus.offset.toFixed(1)}`);
+  record('Q puts the pilot out on foot, on the surface, with the camera on them');
+
+  // Walking, then running, at human speeds.
+  await page.keyboard.down('w');
+  await page.waitForTimeout(2200);
+  const walking = await state();
+  await page.keyboard.down('Shift');
+  await page.waitForTimeout(1800);
+  const running = await state();
+  await page.keyboard.up('Shift');
+  await page.keyboard.up('w');
+  assert.ok(walking.pilot.speedKmh >= 5 && walking.pilot.speedKmh <= 9,
+    `a walk is ${walking.pilot.speedKmh} km/h`);
+  assert.ok(running.pilot.speedKmh > walking.pilot.speedKmh + 6,
+    `a run is faster: ${running.pilot.speedKmh} against ${walking.pilot.speedKmh} km/h`);
+  assert.ok(running.pilot.speedKmh <= 22, 'and is still a person, not a vehicle');
+  record('The pilot walks and runs at human speeds, and the panel reports theirs, not the aircraft');
+
+  // Out of reach of the aircraft, boarding is refused; back at it, it is not.
+  await page.keyboard.down('w');
+  await page.keyboard.down('Shift');
+  await page.waitForFunction(() => window.merc.state().toAircraft > 12, null, { timeout: 30000 });
+  await page.keyboard.up('Shift');
+  await page.keyboard.up('w');
+  const away = await state();
+  assert.equal(await page.evaluate(() => window.merc.getIn()), false,
+    `boarding is refused from ${Math.round(away.toAircraft * 5)} m away`);
+  assert.equal((await state()).stance, 'afoot', 'and the pilot stays on foot');
+  await page.keyboard.down('s');
+  await page.keyboard.down('Shift');
+  await page.waitForFunction(() => window.merc.state().toAircraft < 7, null, { timeout: 40000 });
+  await page.keyboard.up('Shift');
+  await page.keyboard.up('s');
+  assert.equal(await page.evaluate(() => window.merc.getIn()), true, 'and accepted at the door');
+  const aboard = await state();
+  assert.equal(aboard.stance, 'landed');
+  assert.equal(aboard.pilot.visible, false, 'the figure is put away');
+  record('You have to walk back to the aircraft to climb into it');
+
+  // And up again.
+  await page.keyboard.down('Space');
+  await page.waitForTimeout(2200);
+  await page.keyboard.up('Space');
+  const up = await state();
+  const below = await page.evaluate(() => window.merc.world.groundHeight(window.merc.craft.x, window.merc.craft.z));
+  assert.equal(up.stance, 'flying');
+  assert.ok(up.position.y - below > 8, `it is airborne again: ${(up.position.y - below).toFixed(1)} units up`);
+  assert.ok(up.rotor > 0.7, `with the rotor back up to speed: ${up.rotor}`);
+  record('The collective lifts it off again and the rotor comes back up');
+
+  // Water and cliffs refuse, with a reason. Both exist in every region.
+  const refusals = await page.evaluate(() => {
+    const merc = window.merc, out = {};
+    // Open water.
+    let wet = null, steep = null;
+    for (let z = -900; z < 900 && !(wet && steep); z += 23) {
+      for (let x = -900; x < 900; x += 23) {
+        const h = merc.world.groundHeight(x, z);
+        if (!wet && h < -6) wet = { x, z };
+        if (!steep && h > 1 && merc.world.slope(x, z, 4) > 1.1) steep = { x, z };
+      }
+    }
+    for (const [label, spot] of [['water', wet], ['cliff', steep]]) {
+      if (!spot) { out[label] = null; continue; }
+      merc.teleport(spot.x, spot.z);
+      out[label] = merc.landingHere();
+    }
+    merc.teleport(merc.world.home.x, merc.world.home.z);
+    return out;
+  });
+  assert.equal(refusals.water.ok, false, 'the sea refuses a landing');
+  assert.match(refusals.water.reason, /WATER/);
+  if (refusals.cliff) {
+    assert.equal(refusals.cliff.ok, false, 'so does a cliff');
+    assert.match(refusals.cliff.reason, /STEEP/);
+  }
+  evidence.measurements.onFoot = {
+    skidHeight: +(down.position.y - surface).toFixed(2), rotorParked: spun.rotor,
+    stepOut: out.toAircraft, walkKmh: walking.pilot.speedKmh, runKmh: running.pilot.speedKmh,
+    refusedAt: +away.toAircraft.toFixed(1), refusals,
+  };
+  record('Water and cliffs refuse a landing, and say why');
+
   // ---------------------------------------------------------------- the camera
   // Every peak the generator can produce, from the lowest ground to the ceiling.
   const clearances = await page.evaluate(() => {

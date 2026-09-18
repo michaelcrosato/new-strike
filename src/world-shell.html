@@ -68,6 +68,9 @@
     #mission b{display:block;font-size:8px;letter-spacing:1.1px;color:var(--amber);margin-bottom:5px}
     #mission i{display:block;height:3px;background:#b5c5aa22}#mission i b{height:100%;background:var(--amber);margin:0}
     #mission small{display:block;font-size:7px;letter-spacing:1.2px;color:var(--muted);margin-top:5px}
+    #stance{font-size:8px;letter-spacing:1.8px;color:var(--amber);margin:0 0 9px;
+      display:flex;justify-content:space-between;gap:10px}
+    #stance em{font-style:normal;color:var(--muted);letter-spacing:1.1px;font-size:7px;text-align:right}
     #alert{margin-top:10px;font-size:8px;letter-spacing:1.6px;color:#ff8060;animation:warn 1s infinite}
     @keyframes warn{50%{opacity:.45}}
     #yard{position:fixed;inset:0;z-index:22;display:flex;align-items:center;justify-content:center;
@@ -363,6 +366,7 @@
   </section>
 
   <section id="hud">
+    <div id="stance">FLYING</div>
     <div class="gauge"><span>ARMOUR</span><i><b id="armour-bar"></b></i><u id="armour">—</u></div>
     <div class="gauge"><span>FUEL</span><i><b id="fuel-bar"></b></i><u id="fuel">—</u></div>
     <div id="weapons"></div>
@@ -393,6 +397,7 @@
     <button id="rail-work" aria-label="Contract board">WORK</button>
     <button id="rail-map" aria-label="Region map">MAP</button>
     <button id="rail-yard" aria-label="The yard">YARD</button>
+    <button id="rail-stance" aria-label="Land, get out, or climb back in">LAND</button>
     <button id="rail-home" aria-label="Return to your own pad">HOME</button>
     <button id="rail-panels" aria-label="Show flight telemetry">DATA</button>
   </nav>
@@ -417,7 +422,8 @@
     <div><kbd>W A S D</kbd>fly</div>
     <div><kbd>MOUSE</kbd>or<kbd>ARROWS</kbd>aim</div>
     <div><kbd>SHIFT</kbd>run up the throttle</div>
-    <div><kbd>SPACE</kbd>climb <kbd>C</kbd>descend</div>
+    <div><kbd>SPACE</kbd>climb <kbd>C</kbd>descend to land</div>
+    <div><kbd>Q</kbd>get out / climb back in</div>
     <div><kbd>SPACE</kbd>fire <kbd>E</kbd>winch / scan <kbd>F</kbd>flares</div>
     <div><kbd>1 2 3</kbd>weapons <kbd>B</kbd>the yard</div>
     <div><kbd>WHEEL</kbd>or<kbd>- =</kbd>zoom <kbd>0</kbd>reset</div>
@@ -470,7 +476,7 @@
           <h3>THE AIRCRAFT</h3>
           <div class="for-keys">
             <p><kbd>W A S D</kbd> fly · <kbd>MOUSE</kbd> or <kbd>ARROWS</kbd> aim · <kbd>SHIFT</kbd> throttle ·
-            <kbd>SPACE</kbd> climb · <kbd>C</kbd> descend</p>
+            <kbd>SPACE</kbd> climb · <kbd>C</kbd> descend to land · <kbd>Q</kbd> get out and walk</p>
             <p><kbd>SPACE</kbd> fire · <kbd>E</kbd> winch, scan or mark · <kbd>F</kbd> flares · <kbd>1 2 3</kbd> weapons</p>
             <p><kbd>B</kbd> the yard · <kbd>M</kbd> the map · <kbd>H</kbd> back to the pad · <kbd>G</kbd> hide the panels</p>
             <p>Wheel or <kbd>-</kbd> <kbd>=</kbd> zoom, <kbd>0</kbd> back to the default view.</p>
@@ -482,6 +488,9 @@
             <p>Right thumb points and shoots: hold <b>AIM · FIRE</b> to shoot, and slide it to
               point the aircraft — you fly one way and face another. <b>WINCH</b> winches, scans
               or marks, and <b>FLARE</b> throws countermeasures. Tap a weapon tile to change weapon.</p>
+            <p><b>LAND</b> sets the machine down where you are, and once it is down the same
+              button puts you out on foot. Walk with the left thumb; the button reads
+              <b>BOARD</b> when you are close enough to climb back in.</p>
             <p>Down the right edge: the work, the map, the yard, and the way back to your pad.</p>
             <p>Pinch the world to pull the camera back to eight times the view. The map pinches
               and drags too, down to six hundred metres across.</p>

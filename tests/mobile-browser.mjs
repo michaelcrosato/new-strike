@@ -470,6 +470,44 @@ try {
       `${label}: the rail flies you back to the pad`);
     record(`The rail button returns the aircraft to its own pad (${label})`);
 
+    // ---------------------------------------------------------------- down, and out
+    // The touch path for landing and getting out. A thumb has no key to hold, so the rail
+    // button asks for the descent and the flight model holds it until the skids touch.
+    await page.evaluate(() => window.merc.teleport(window.merc.world.home.x, window.merc.world.home.z));
+    await page.waitForTimeout(300);
+    const stanceButton = await centreOf(page, '#rail-stance');
+    assert.equal(await page.evaluate(() => document.getElementById('rail-stance').textContent), 'LAND',
+      `${label}: the button offers a landing while you are flying`);
+    await touch.tap(stanceButton.x, stanceButton.y);
+    await page.waitForFunction(() => window.merc.state().stance === 'landed', null, { timeout: 20000 });
+    const downTouch = await state();
+    const surfaceTouch = await page.evaluate(() => window.merc.world.groundHeight(window.merc.craft.x, window.merc.craft.z));
+    assert.ok(Math.abs(downTouch.position.y - surfaceTouch - 1.7) < 0.2,
+      `${label}: one tap sets it down on its skids`);
+    assert.equal(await page.evaluate(() => document.getElementById('rail-stance').textContent), 'GET OUT',
+      `${label}: and the same button now offers the door`);
+
+    await touch.tap(stanceButton.x, stanceButton.y);
+    await page.waitForTimeout(400);
+    const afootTouch = await state();
+    assert.equal(afootTouch.stance, 'afoot', `${label}: a second tap puts the pilot out`);
+    assert.equal(afootTouch.pilot.visible, true, `${label}: and draws them`);
+
+    // The flight stick walks the pilot, at a walk rather than at a cruise.
+    const joyFoot = await centreOf(page, '#joystick');
+    await touch.drag({ x: joyFoot.x, y: joyFoot.y }, { x: joyFoot.x, y: joyFoot.y - 46 }, { steps: 8, hold: 2200 });
+    const walkedTouch = await state();
+    assert.ok(walkedTouch.pilot.speedKmh > 4 && walkedTouch.pilot.speedKmh <= 22,
+      `${label}: the thumb stick walks the pilot at ${walkedTouch.pilot.speedKmh} km/h`);
+    await page.waitForTimeout(300);
+
+    // And back in, from the same button once you are within reach.
+    await page.evaluate(() => window.merc.getIn());
+    const aboardTouch = await state();
+    assert.equal(aboardTouch.stance, 'landed', `${label}: and back aboard`);
+    measurements.onFoot = { walkKmh: walkedTouch.pilot.speedKmh, stepOut: afootTouch.toAircraft };
+    record(`The rail lands the aircraft, puts the pilot out, and the stick walks them (${label})`);
+
     await page.screenshot({ path: `artifacts/mobile-${label}-flight.png` });
     evidence.measurements[label] = measurements;
     await context.close();

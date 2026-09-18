@@ -10,8 +10,8 @@ the twelve kinds of job you fly.
 
 ```powershell
 npm run world          # builds the game and serves it
-npm test               # 131 checks across eight suites
-npm run verify:world   # 24 browser checks against the built bundle (server must be running)
+npm test               # 141 checks across nine suites
+npm run verify:world   # 30 browser checks against the built bundle (server must be running)
 ```
 
 Open **http://localhost:4189**. `W A S D` fly, `SHIFT` throttle, `SPACE` climb, `C` descend,
@@ -317,10 +317,12 @@ day to be flying.
 independent of where the nose is, so the aircraft crabs, slides and flies backwards the way a
 gunship actually fights: you can run from a checkpoint with the gun still on it.
 
-| | fly | aim |
-| --- | --- | --- |
-| desktop | `W A S D` | the mouse, or the arrow keys |
-| phone | left thumb stick | right thumb stick (hold to fire, slide to aim) |
+| | fly | aim | land | get out |
+| --- | --- | --- | --- | --- |
+| desktop | `W A S D` | the mouse, or the arrow keys | hold `C` | `Q` |
+| phone | left thumb stick | right thumb stick (hold to fire, slide to aim) | the rail's LAND | the same button again |
+
+On foot the left stick walks instead of flying, and the right one still points the pilot.
 
 The mouse aims at the ground under the cursor, and **lets go again** — it aims while it has
 moved in the last couple of seconds or while the trigger is down, and then the nose falls in
@@ -350,6 +352,63 @@ because the algebra is what hid the bug in the first place: it flies all four di
 fails if the nose and the travel disagree, checks that the arrows and the mouse each point the
 aircraft independently of where it is going, and checks that rounds leave along the nose and
 not along the travel.
+
+## Landing, and getting out — `src/crew.js`
+
+The flight model never landed. It held a clearance of eleven units over whatever was below
+and floored at four, so the lowest you could get was **twenty metres off the deck with the
+rotor still turning**. Holding the descend control now takes the skids all the way down.
+
+**You can put it down almost anywhere.** Measured across the region, **81% of the dry ground
+accepts a landing**; the rest is genuinely cliff or shoreline. The limit is deliberately more
+generous than the real thing — a slope landing in most types is held to ten or fifteen
+degrees, and this region's grade distribution has a median of 0.18 with a long tail (p90 of
+0.8), so a realistic limit would refuse nearly a third of the map. Thirty degrees reads as
+"if it looks flat enough, you can put it down" while the sea and a mountain face still say
+no, and say which:
+
+| refused | because |
+| --- | --- |
+| WATER BELOW — NOWHERE TO PUT IT DOWN | the surface under you is sea |
+| HALF OVER WATER | the footprint straddles the shoreline |
+| TOO STEEP FOR THE SKIDS | one skid would take the whole machine |
+| TOO FAST TO SET DOWN | over 50 km/h across the ground is an arrival, not a landing |
+
+The grade is measured across the footprint rather than at a point, because a machine sits on
+its whole undercarriage and one sample can miss the edge of a gully. Over ground it cannot
+use, it holds a low hover instead of refusing silently. The rotor winds down once it is
+down — to 0.11 of its speed within three seconds — which is most of what makes a landing
+read as a landing rather than a hover at zero altitude.
+
+**Then you can get out.** `Q` on a keyboard, or the rail button on a phone, puts the pilot
+out of the door and onto the ground; the same control climbs back in, and only from within
+eight units of the aircraft.
+
+On foot:
+
+- the pilot **walks at 7 km/h and runs at 20**, which is a generous sprint in flight gear but
+  makes crossing a hundred-and-fifty-metre settlement a twenty-seven-second job rather than a
+  two-minute one
+- the camera comes in to **42% of the flight view**, because a person is under two units tall
+  in a hundred-unit frame, and it frames the pilot rather than the machine
+- the streamer loads around **whoever you are controlling**, so walking away keeps the world
+  coming
+- the telemetry panel reports the pilot's position, altitude and pace — reading the parked
+  aircraft's zero while you are walking is simply wrong
+- **you will not walk into the sea**, and each axis is tried separately so you slide along a
+  shoreline rather than sticking to it
+- the legs swing off distance covered rather than off the clock, so they do not pedal when
+  you stop
+- the map marks the pilot separately from the parked aircraft, with a line between them,
+  because a person is invisible at map scale and walking away from your ride is the one
+  mistake this makes possible
+
+Firing, the winch and mission work all belong to the aircraft in the air, so they do nothing
+while you are out of it, and the engine burns no fuel sitting there. `H` — back to the pad —
+puts you in the aircraft and airborne again from wherever you were.
+
+Not yet: the pilot cannot be shot at, and cannot shoot. Getting out in a hostile area is
+currently free, which is the obvious next thing this wants.
 
 ## Flight — `src/flight.js`
 
@@ -492,13 +551,17 @@ weapon tiles, and a rail down the right edge for the work, the map, the yard and
 home. Both aspect ratios a phone has are laid out and tested: 9:16 held upright and 16:9
 turned over.
 
+Also wired: putting the aircraft down almost anywhere on land, and a pilot who can climb out
+of it and walk around on the ground.
+
 Also wired: the renderer, on WebGPU where the browser has it and WebGL 2 where it does not,
 both from one code path and both measured against each other; the upbeat look, tuned against
 the original's own numbers; a tone per area; and a flight model at a modern gunship's cruise
 and top speed.
 
-Not yet: no ambient occlusion, which is the missing lever on tonal range and which the
-campaign has; no interiors or ground-level detail (the camera never gets close enough to need
+Not yet: the pilot cannot be shot at and cannot shoot, so getting out in a hostile area is
+free; no ambient occlusion, which is the missing lever on tonal range and which the campaign
+has; no interiors or ground-level detail (the camera never gets close enough to need
 them); no weather beyond the one complication; no day/night cycle; and no persistent
 consequences for a faction beyond its standing number — a faction you have ruined does not
 yet visibly lose ground on the map.
@@ -535,14 +598,15 @@ which was long enough for the browser to throw away the next tap.
 
 ## Verification
 
-- **131 module checks** across eight suites: the campaign parity harness, the campaign
+- **141 module checks** across nine suites: the campaign parity harness, the campaign
   levels, the world and streamer, the outfit, combat and the first eight kinds, the region
   layer with its landmarks and place names, and the newer four kinds with their complications.
 - **18 browser checks** (`npm run verify:world`) against the built single file served at the
   site root: it boots and renders on both backends to the same picture, the briefing describes
   the generated region, the frame keeps the original's upbeat range and each area carries its
   own tone, real keyboard input flies the aircraft at a gunship's cruise and top speed, the dual-stick
-  controls fly and aim independently and the gun follows the nose, the camera stays above the ground everywhere including the highest
+  controls fly and aim independently and the gun follows the nose, the aircraft lands on its
+  skids and the pilot gets out and walks, the camera stays above the ground everywhere including the highest
   ground the sweep can find, nine regions and nine landmarks exist and the readout changes as
   you cross them, every landmark streams in without error, the zoom ladder reaches exactly
   eight times the default with the far field filling it, the coarse mesh stays under the

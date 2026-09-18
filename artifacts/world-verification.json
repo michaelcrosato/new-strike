@@ -9,6 +9,12 @@
     "The arrow keys aim independently of where the aircraft is flying",
     "The mouse aims: the nose points at the ground under the cursor",
     "Rounds go where the aircraft is pointing, not where it is flying",
+    "Holding the descend control puts the aircraft down on its skids, and the rotor winds down",
+    "Q puts the pilot out on foot, on the surface, with the camera on them",
+    "The pilot walks and runs at human speeds, and the panel reports theirs, not the aircraft",
+    "You have to walk back to the aircraft to climb into it",
+    "The collective lifts it off again and the rotor comes back up",
+    "Water and cliffs refuse a landing, and say why",
     "The camera stays above the ground everywhere, including the highest ground in the region",
     "Nine regions with nine landmarks, and the readout changes as you cross them",
     "Every one of the nine landmarks streams in and builds without error",
@@ -70,13 +76,23 @@
       "yaw": 0,
       "aim": 0,
       "aiming": false,
+      "stance": "flying",
+      "pilot": {
+        "x": 12,
+        "z": -23,
+        "y": 12.75,
+        "speedKmh": 0,
+        "visible": false
+      },
+      "toAircraft": 0,
+      "rotor": 1,
       "tint": "#fffefc",
       "tintAmount": 0.024,
       "exposure": 1.5,
       "sun": 3.75,
       "hemi": 1.78,
       "fps": 60,
-      "streamMs": 0.02,
+      "streamMs": 0.04,
       "stats": {
         "built": 66,
         "disposed": 0,
@@ -96,7 +112,7 @@
       "overview": {
         "visible": false,
         "triangles": 131072,
-        "ms": 72.1
+        "ms": 90.6
       },
       "mapMs": 0,
       "cameraClearance": 156.6
@@ -106,13 +122,13 @@
       "hasWebGPU": true,
       "primaryFrame": {
         "lum": 0.636,
-        "sat": 0.615,
+        "sat": 0.616,
         "max": 0.733,
         "spread": 3
       },
       "fallbackFrame": {
         "lum": 0.638,
-        "sat": 0.609,
+        "sat": 0.61,
         "max": 0.736,
         "spread": 3
       }
@@ -258,8 +274,8 @@
       "rounds": {
         "count": 1,
         "dir": {
-          "x": -0.14585663131176171,
-          "z": 0.9893057379305878
+          "x": -0.15251968505249153,
+          "z": 0.9883004329005874
         },
         "nose": {
           "x": -0.139,
@@ -271,17 +287,35 @@
         }
       }
     },
+    "onFoot": {
+      "skidHeight": 1.7,
+      "rotorParked": 0.11,
+      "stepOut": 5,
+      "walkKmh": 7,
+      "runKmh": 20,
+      "refusedAt": 12,
+      "refusals": {
+        "water": {
+          "ok": false,
+          "reason": "WATER BELOW — NOWHERE TO PUT IT DOWN"
+        },
+        "cliff": {
+          "ok": false,
+          "reason": "TOO STEEP FOR THE SKIDS"
+        }
+      }
+    },
     "camera": {
       "out": [
         {
           "x": 0,
           "z": 0,
-          "clearance": 152.2
+          "clearance": 152.3
         },
         {
           "x": -851,
           "z": -483,
-          "clearance": 142.9
+          "clearance": 143.3
         },
         {
           "x": -55,
@@ -291,12 +325,12 @@
         {
           "x": 535,
           "z": -516,
-          "clearance": 155.1
+          "clearance": 149.7
         },
         {
           "x": -561,
           "z": -202,
-          "clearance": 147.3
+          "clearance": 147
         },
         {
           "x": -526,
@@ -306,27 +340,27 @@
         {
           "x": 708,
           "z": -118,
-          "clearance": 147.8
+          "clearance": 146
         },
         {
           "x": -725,
           "z": 487,
-          "clearance": 140.4
+          "clearance": 139.7
         },
         {
           "x": 73,
           "z": 468,
-          "clearance": 152.2
+          "clearance": 153.1
         },
         {
           "x": 714,
           "z": 334,
-          "clearance": 170.4
+          "clearance": 168
         },
         {
           "x": 699,
           "z": -83,
-          "clearance": 199.6
+          "clearance": 204.6
         }
       ],
       "peak": {
@@ -361,44 +395,44 @@
         {
           "step": 0,
           "zoom": 0.7,
-          "across": 118,
-          "draw": 84,
+          "across": 116,
+          "draw": 83,
           "fog": 0.00105,
           "overview": false,
-          "clearance": 144.2
+          "clearance": 144.4
         },
         {
           "step": 1,
           "zoom": 1,
-          "across": 167,
-          "draw": 84,
+          "across": 166,
+          "draw": 83,
           "fog": 0.00097,
           "overview": false,
-          "clearance": 170.9
+          "clearance": 168
         },
         {
           "step": 2,
           "zoom": 1.41,
           "across": 235,
-          "draw": 84,
+          "draw": 83,
           "fog": 0.00082,
           "overview": true,
-          "clearance": 230.9
+          "clearance": 231.1
         },
         {
           "step": 3,
           "zoom": 2,
           "across": 333,
-          "draw": 84,
+          "draw": 83,
           "fog": 0.00066,
           "overview": true,
-          "clearance": 302.5
+          "clearance": 302.4
         },
         {
           "step": 4,
           "zoom": 2.83,
           "across": 471,
-          "draw": 84,
+          "draw": 83,
           "fog": 0.00052,
           "overview": true,
           "clearance": 401.3
@@ -407,7 +441,7 @@
           "step": 5,
           "zoom": 4,
           "across": 666,
-          "draw": 84,
+          "draw": 83,
           "fog": 0.00039,
           "overview": true,
           "clearance": 542.5
@@ -416,7 +450,7 @@
           "step": 6,
           "zoom": 5.66,
           "across": 942,
-          "draw": 84,
+          "draw": 83,
           "fog": 0.00029,
           "overview": true,
           "clearance": 742.9
@@ -425,7 +459,7 @@
           "step": 7,
           "zoom": 8,
           "across": 1331,
-          "draw": 84,
+          "draw": 83,
           "fog": 0.00022,
           "overview": true,
           "clearance": 1025.3
@@ -434,7 +468,7 @@
       "far": {
         "visible": false,
         "triangles": 131072,
-        "ms": 72.1
+        "ms": 90.6
       }
     },
     "pokeThrough": {
@@ -444,7 +478,7 @@
       "worst": 4.099237456716109
     },
     "map": {
-      "ms": 128,
+      "ms": 129,
       "sameTwice": true
     },
     "mapNavigation": {
@@ -462,7 +496,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 128,
+        "ms": 129,
         "size": 620,
         "redraws": 1,
         "settled": true
@@ -481,7 +515,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 114,
+        "ms": 133,
         "size": 620,
         "redraws": 2,
         "settled": true
@@ -500,7 +534,7 @@
           125
         ],
         "baseSpan": 1000,
-        "ms": 98,
+        "ms": 116,
         "size": 620,
         "redraws": 3,
         "settled": true
@@ -519,7 +553,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 137,
+        "ms": 143,
         "size": 620,
         "redraws": 4,
         "settled": true
@@ -538,7 +572,7 @@
           125
         ],
         "baseSpan": 125,
-        "ms": 115,
+        "ms": 122,
         "size": 620,
         "redraws": 5,
         "settled": true
@@ -557,7 +591,7 @@
           125
         ],
         "baseSpan": 2000,
-        "ms": 106,
+        "ms": 119,
         "size": 620,
         "redraws": 6,
         "settled": true
@@ -578,7 +612,7 @@
       "smuggling": "RUN IT IN UNSEEN"
     },
     "winch": {
-      "paidOut": 2.359479620928082
+      "paidOut": 2.413747502848425
     },
     "job": {
       "cash": 5000,
@@ -610,7 +644,7 @@
         "peakResident": 69
       },
       "peak": 69,
-      "worst": 0.02,
+      "worst": 0,
       "resident": 35,
       "nodes": 7255
     }

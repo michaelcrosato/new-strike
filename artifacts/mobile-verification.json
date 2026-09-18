@@ -3,7 +3,7 @@
     "The built bundle boots and renders at 390x844 (portrait)",
     "The briefing fits the screen and a tap gets past it (portrait)",
     "No panel hangs off the edge of the screen and the page does not scroll (portrait)",
-    "The heads-up chrome leaves most of the world visible: 14% covered (portrait)",
+    "The heads-up chrome leaves most of the world visible: 15% covered (portrait)",
     "A thumb on the flight stick flies the aircraft, and releasing it centres (portrait)",
     "The fire button shoots and the winch button pays out the cable (portrait)",
     "The aim stick points the aircraft, and centres when released (portrait)",
@@ -16,10 +16,11 @@
     "The rail opens the contract board and the yard, both readable and closable (portrait)",
     "Weapon tiles switch weapons on a tap (portrait)",
     "The rail button returns the aircraft to its own pad (portrait)",
+    "The rail lands the aircraft, puts the pilot out, and the stick walks them (portrait)",
     "The built bundle boots and renders at 844x390 (landscape)",
     "The briefing fits the screen and a tap gets past it (landscape)",
     "No panel hangs off the edge of the screen and the page does not scroll (landscape)",
-    "The heads-up chrome leaves most of the world visible: 20% covered (landscape)",
+    "The heads-up chrome leaves most of the world visible: 22% covered (landscape)",
     "A thumb on the flight stick flies the aircraft, and releasing it centres (landscape)",
     "The fire button shoots and the winch button pays out the cable (landscape)",
     "The aim stick points the aircraft, and centres when released (landscape)",
@@ -32,6 +33,7 @@
     "The rail opens the contract board and the yard, both readable and closable (landscape)",
     "Weapon tiles switch weapons on a tap (landscape)",
     "The rail button returns the aircraft to its own pad (landscape)",
+    "The rail lands the aircraft, puts the pilot out, and the stick walks them (landscape)",
     "No external requests and no errors in either orientation"
   ],
   "errors": [],
@@ -80,13 +82,23 @@
         "yaw": 0,
         "aim": 0,
         "aiming": false,
-        "tint": "#fffaec",
-        "tintAmount": 0.158,
+        "stance": "flying",
+        "pilot": {
+          "x": 12,
+          "z": -23,
+          "y": 12.75,
+          "speedKmh": 0,
+          "visible": false
+        },
+        "toAircraft": 0,
+        "rotor": 1,
+        "tint": "#fffbf1",
+        "tintAmount": 0.123,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
         "fps": 94,
-        "streamMs": 0.04,
+        "streamMs": 0.02,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -106,7 +118,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 70.1
+          "ms": 90.1
         },
         "mapMs": 0,
         "cameraClearance": 156.6
@@ -124,7 +136,7 @@
             "x": 12,
             "y": 54,
             "w": 206,
-            "h": 81
+            "h": 100
           },
           "#outfit": {
             "x": 0,
@@ -142,18 +154,18 @@
             "x": 328,
             "y": 62,
             "w": 52,
-            "h": 160
+            "h": 193
           }
         },
         "scrollWidth": 390,
         "vw": 390,
         "vh": 844
       },
-      "coveredPercent": 14,
+      "coveredPercent": 15,
       "travelled": 8.9,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 10.02
+        "cablePaid": 10
       },
       "aimStick": {
         "up": 1,
@@ -198,7 +210,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 160,
+          "ms": 230,
           "size": 720,
           "redraws": 1,
           "settled": true
@@ -217,7 +229,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 149,
+          "ms": 231,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -236,7 +248,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 149,
+          "ms": 231,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -257,7 +269,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 149,
+          "ms": 231,
           "size": 720,
           "redraws": 2,
           "settled": true
@@ -276,7 +288,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 149,
+          "ms": 231,
           "size": 720,
           "redraws": 2,
           "settled": false
@@ -295,7 +307,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 112,
+          "ms": 146,
           "size": 720,
           "redraws": 3,
           "settled": false
@@ -308,6 +320,10 @@
         "inside": true,
         "scrollable": true,
         "fittings": 9
+      },
+      "onFoot": {
+        "walkKmh": 15,
+        "stepOut": 5
       }
     },
     "landscape": {
@@ -353,13 +369,23 @@
         "yaw": 0,
         "aim": 0,
         "aiming": false,
-        "tint": "#fff9eb",
-        "tintAmount": 0.17,
+        "stance": "flying",
+        "pilot": {
+          "x": 12,
+          "z": -23,
+          "y": 12.75,
+          "speedKmh": 0,
+          "visible": false
+        },
+        "toAircraft": 0,
+        "rotor": 1,
+        "tint": "#fffaed",
+        "tintAmount": 0.153,
         "exposure": 1.5,
         "sun": 3.75,
         "hemi": 1.78,
         "fps": 94,
-        "streamMs": 0.02,
+        "streamMs": 0.04,
         "stats": {
           "built": 66,
           "disposed": 0,
@@ -379,7 +405,7 @@
         "overview": {
           "visible": false,
           "triangles": 131072,
-          "ms": 68.8
+          "ms": 77
         },
         "mapMs": 0,
         "cameraClearance": 156.6
@@ -397,7 +423,7 @@
             "x": 26,
             "y": 46,
             "w": 196,
-            "h": 77
+            "h": 96
           },
           "#outfit": {
             "x": 854,
@@ -415,18 +441,18 @@
             "x": 782,
             "y": 46,
             "w": 52,
-            "h": 126
+            "h": 152
           }
         },
         "scrollWidth": 844,
         "vw": 844,
         "vh": 390
       },
-      "coveredPercent": 20,
-      "travelled": 8.8,
+      "coveredPercent": 22,
+      "travelled": 8.9,
       "fire": {
         "peakShots": 5,
-        "cablePaid": 10.01
+        "cablePaid": 9.64
       },
       "aimStick": {
         "up": 1,
@@ -471,7 +497,7 @@
             125
           ],
           "baseSpan": 2000,
-          "ms": 147,
+          "ms": 160,
           "size": 709,
           "redraws": 1,
           "settled": true
@@ -490,7 +516,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 146,
+          "ms": 158,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -509,7 +535,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 146,
+          "ms": 158,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -530,7 +556,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 146,
+          "ms": 158,
           "size": 709,
           "redraws": 2,
           "settled": true
@@ -549,7 +575,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 146,
+          "ms": 158,
           "size": 709,
           "redraws": 2,
           "settled": false
@@ -568,7 +594,7 @@
             125
           ],
           "baseSpan": 500,
-          "ms": 87,
+          "ms": 95,
           "size": 709,
           "redraws": 3,
           "settled": false
@@ -581,6 +607,10 @@
         "inside": true,
         "scrollable": true,
         "fittings": 9
+      },
+      "onFoot": {
+        "walkKmh": 15,
+        "stepOut": 5
       }
     }
   }

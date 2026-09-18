@@ -42,6 +42,12 @@ Movement is screen-relative and independent of where the nose is, so the aircraf
 flies backwards the way a gunship fights — you can run from a checkpoint with the gun still on
 it. On a phone the right thumb is the second stick: hold to fire, slide to aim.
 
+**Hold `C` to set the machine down** — 81% of the dry ground in the region will take it, and
+the sea and a cliff tell you why they will not. Once it is down, **`Q` puts you out on foot**:
+the pilot walks at 7 km/h and runs at 20, the camera comes in close, and the same key climbs
+back in from within eight units of the door. On a phone the rail button does all three in
+turn: LAND, GET OUT, BOARD.
+
 On a phone the left thumb flies — pushed to the rim it runs the throttle up — and the right
 thumb fires, winches and throws flares, with `▲ ▼` for height, tappable weapon tiles, and a
 rail down the right edge for the work, the map, the yard and the way home. Both orientations
